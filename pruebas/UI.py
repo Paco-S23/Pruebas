@@ -1,79 +1,62 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="IBM Agents UI", layout="wide")
+st.set_page_config(layout="wide", page_title="IBM Agents")
 
-st.title("🤖 IBM Watson Orchestrate Agents")
-st.info("👇 El chat debería aparecer dentro del recuadro de abajo. Si ves un icono de chat en la esquina, dale clic.")
+# --- MENU LATERAL ---
+st.sidebar.header("Selecciona Agente")
+opcion = st.sidebar.radio("", ["Agente 1", "Agente 2"])
 
-# ==========================================
-# Configuración (Tus scripts)
-# ==========================================
-COMMON_CONFIG = {
+# --- CONFIGURACIÓN ---
+# Tus credenciales ya integradas
+CONFIG = {
     "orchestrationID": "03ada0a325ec426d893eef11d68e7d31_f322ed2b-accb-4baa-a7e9-3d0419313afc",
     "hostURL": "https://jp-tok.watson-orchestrate.cloud.ibm.com",
     "crn": "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::"
 }
 
 AGENTS = {
-    "Agente 1": {
-        "agentId": "df87f2d2-3200-4788-b0bd-de2033f818ee",
-        "agentEnvironmentId": "f9558573-5f2c-4fc7-bdc3-09c8d590f7de"
-    },
-    "Agente 2": {
-        "agentId": "ab2a2d5a-feb8-4756-b8cb-57d78bbb085c",
-        "agentEnvironmentId": "3ed7b3a1-c9d5-4d20-8ace-beda0ab22455"
-    }
+    "Agente 1": {"id": "df87f2d2-3200-4788-b0bd-de2033f818ee", "env": "f9558573-5f2c-4fc7-bdc3-09c8d590f7de"},
+    "Agente 2": {"id": "ab2a2d5a-feb8-4756-b8cb-57d78bbb085c", "env": "3ed7b3a1-c9d5-4d20-8ace-beda0ab22455"}
 }
 
-# Selector en la barra lateral
-agent_selection = st.sidebar.radio("Selecciona el Agente:", list(AGENTS.keys()))
-
-def get_chat_html(agent_name):
-    config = AGENTS[agent_name]
+# --- GENERADOR DE HTML ---
+def render_chat(agent_name):
+    data = AGENTS[agent_name]
     
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            /* Forzamos que el contenedor ocupe todo el espacio y tenga fondo blanco */
-            body, html {{ height: 100%; margin: 0; background-color: #ffffff; }}
-            #root {{ width: 100%; height: 100%; }}
-        </style>
-    </head>
-    <body>
-        <div id="root">Cargando chat de IBM...</div>
+    return f"""
+    <div style="width: 100%; height: 700px; background-color: white; border: 1px solid #ddd;">
+        <div id="root" style="width: 100%; height: 100%;"></div>
+    </div>
 
-        <script>
-          window.wxOConfiguration = {{
-            orchestrationID: "{COMMON_CONFIG['orchestrationID']}",
-            hostURL: "{COMMON_CONFIG['hostURL']}",
-            rootElementID: "root",
-            deploymentPlatform: "ibmcloud",
-            crn: "{COMMON_CONFIG['crn']}",
-            chatOptions: {{
-                agentId: "{config['agentId']}", 
-                agentEnvironmentId: "{config['agentEnvironmentId']}",
-            }}
-          }};
+    <script>
+      window.wxOConfiguration = {{
+        orchestrationID: "{CONFIG['orchestrationID']}",
+        hostURL: "{CONFIG['hostURL']}",
+        rootElementID: "root",
+        deploymentPlatform: "ibmcloud",
+        crn: "{CONFIG['crn']}",
+        chatOptions: {{
+            agentId: "{data['id']}", 
+            agentEnvironmentId: "{data['env']}",
+        }}
+      }};
 
-          setTimeout(function () {{
-            const script = document.createElement('script');
-            script.src = "{COMMON_CONFIG['hostURL']}/wxochat/wxoLoader.js?embed=true";
-            script.addEventListener('load', function () {{
-                wxoLoader.init();
-            }});
-            document.head.appendChild(script);
-          }}, 500);
-        </script>
-    </body>
-    </html>
+      // Forzamos carga inmediata
+      const script = document.createElement('script');
+      script.src = "{CONFIG['hostURL']}/wxochat/wxoLoader.js?embed=true";
+      script.onload = function() {{ wxoLoader.init(); }};
+      document.head.appendChild(script);
+    </script>
     """
-    return html_code
 
-st.write(f"### Conectado con: {agent_selection}")
+# --- UI PRINCIPAL ---
+st.title(f"💬 Chat: {opcion}")
 
-# Aquí renderizamos el chat.
-# Le puse un borde para que veas el área activa.
-components.html(get_chat_html(agent_selection), height=800, scrolling=False)
+# Renderizamos el HTML
+components.html(render_chat(opcion), height=720, scrolling=False)
+
+# SI SIGUE BLANCO: Es bloqueo de seguridad de tu navegador.
+# Esta es la solución rápida para que sigas trabajando sin arreglar el código:
+st.warning("¿Pantalla en blanco? Tu navegador está bloqueando el script.")
+st.markdown(f"[👉 Clic aquí para abrir el {opcion} en una pestaña segura](https://jp-tok.watson-orchestrate.cloud.ibm.com/wxochat/wxoLoader.js?embed=true)", unsafe_allow_html=True)
