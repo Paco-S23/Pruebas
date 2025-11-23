@@ -2,3 +2,4 @@ streamlit
 pandas
 requests
 PyPDF2
+ibm-watson-machine-learning==1.0.328
