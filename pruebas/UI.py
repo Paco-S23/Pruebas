@@ -17,7 +17,7 @@ st.set_page_config(
 st.title("📑 ProcureWatch")
 st.markdown("### Interactive Contract Analysis System")
 
-# Inicializar memoria del chat si no existe
+# Inicializar memoria del chat
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -51,12 +51,27 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# 3. BARRA LATERAL
+# 3. HELPER: Etiqueta de Riesgo
+# -------------------------------
+def risk_badge(level):
+    if level == "High":
+        st.error("🔴 High Risk")
+    elif level == "Medium":
+        st.warning("🟠 Medium Risk")
+    elif level == "Low":
+        st.success("🟢 Low Risk")
+
+# -------------------------------
+# 4. BARRA LATERAL (NAVEGACIÓN)
 # -------------------------------
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to:", ["Dashboard", "Contract Analysis & Chat"])
+# AQUÍ AGREGUÉ DE NUEVO LAS 3 OPCIONES
+page = st.sidebar.radio(
+    "Go to:",
+    ["Dashboard", "Contract Analysis & Chat", "External Risk Alerts"]
+)
 st.sidebar.markdown("---")
-st.sidebar.info("💡 Tip: Upload a PDF to start chatting with it.")
+st.sidebar.info("💡 Select 'Contract Analysis' to use the AI Chat.")
 
 # ==============================================================
 # PÁGINA 1: DASHBOARD
@@ -72,38 +87,35 @@ if page == "Dashboard":
     st.dataframe(pd.DataFrame([
         {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
         {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
+        {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
     ]), use_container_width=True)
 
 # ==============================================================
-# PÁGINA 2: ANÁLISIS Y CHAT (INTERACTIVO)
+# PÁGINA 2: ANÁLISIS Y CHAT (AQUÍ ESTÁ LO QUE BUSCAS)
 # ==============================================================
 elif page == "Contract Analysis & Chat":
     st.header("📘 Interactive Contract Monitor")
 
     uploaded = st.file_uploader("1. Upload Contract (PDF)", type=["pdf"])
 
-    # Si se sube un archivo, extraemos el texto y lo guardamos en memoria
     if uploaded:
         if st.session_state.contract_text == "":
             with pdfplumber.open(uploaded) as pdf:
                 text = "\n".join([page.extract_text() or "" for page in pdf.pages])
-                st.session_state.contract_text = text # Guardar en memoria
-            st.success("✅ PDF processed! You can now chat with this document.")
+                st.session_state.contract_text = text
+            st.success("✅ PDF processed! Scroll down to chat.")
 
-    # Mostrar contenido solo si hay texto procesado
     if st.session_state.contract_text:
         
-        # --- SECCIÓN A: RESUMEN AUTOMÁTICO ---
+        # --- PARTE A: ANÁLISIS RÁPIDO ---
         with st.expander("📄 View Contract Text & Auto-Analysis"):
             st.text(st.session_state.contract_text[:1000] + "...")
             
             if st.button("Generate Risk Report (JSON)"):
                 with st.spinner("Analyzing..."):
-                    # Prompt específico para JSON
                     json_prompt = f"""
                     Analyze this contract and output ONLY JSON:
                     {{ "supplier": "name", "risk": "High/Low", "summary": "short summary" }}
-                    
                     Text: {st.session_state.contract_text[:3000]}
                     Output JSON:
                     """
@@ -114,44 +126,51 @@ elif page == "Contract Analysis & Chat":
         st.subheader("💬 Chat with your Contract")
         st.caption("Ask questions like: 'What is the payment term?' or 'Is there a penalty clause?'")
 
-        # --- SECCIÓN B: CHAT INTERACTIVO (LO NUEVO) ---
-        
-        # 1. Mostrar historial de mensajes
+        # --- PARTE B: CHAT INTERACTIVO ---
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # 2. Campo de entrada del usuario
         if prompt := st.chat_input("Ask something about the contract..."):
-            
-            # Guardar y mostrar mensaje del usuario
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # 3. Generar respuesta con IBM
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 message_placeholder.markdown("Thinking...")
                 
-                # Crear el prompt conversacional
                 chat_prompt = f"""
-                Act as a legal assistant. Answer the question based strictly on the contract text provided below.
-                
-                Contract Text:
-                {st.session_state.contract_text[:4000]}
-                
+                Act as a legal assistant. Answer based strictly on the contract text below.
+                Contract Text: {st.session_state.contract_text[:4000]}
                 User Question: {prompt}
-                
                 Answer:
                 """
-                
-                # Llamar a la API
                 full_response = ask_ibm_watson(chat_prompt)
-                
-                # Mostrar y guardar respuesta
                 message_placeholder.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-
     else:
-        st.info("Please upload a PDF to start the analysis.")
+        st.info("Please upload a PDF to start the chat.")
+
+# ==============================================================
+# PÁGINA 3: NOTICIAS (YA LA PUSE OTRA VEZ)
+# ==============================================================
+elif page == "External Risk Alerts":
+    st.header("🌐 Global Supply Chain Alerts")
+    
+    query = st.text_input("Search news (Simulated):", "construction materials")
+    
+    if st.button("Search"):
+        st.write(f"Searching for: **{query}**...")
+        st.markdown("---")
+        
+        st.subheader("Strike at Montreal Port affects cement logistics")
+        st.caption("Source: Logistics Daily • 2 hours ago")
+        st.error("🔴 High Impact")
+        st.write("Potential delay of 2-3 weeks for incoming shipments.")
+        
+        st.markdown("---")
+        
+        st.subheader("Aluminum price stabilizes in EU market")
+        st.caption("Source: Global Trade • 5 hours ago")
+        st.success("🟢 Low Impact")
