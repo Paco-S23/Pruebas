@@ -44,31 +44,26 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# 3. BARRA LATERAL (LIMPIA Y ORDENADA)
+# 3. BARRA LATERAL (CHAT GLOBAL + UPLOADER)
 # -------------------------------
 with st.sidebar:
     st.title("📑 ProcureWatch")
+    st.caption("AI Supply Chain Monitor")
     
-    # --- A. NAVEGACIÓN SUPERIOR ---
-    # Usamos los emojis aquí mismo para que se vea limpio el menú
-    page = st.radio(
-        "Navigation", 
-        ["📊 Dashboard", "📘 Contract Analysis", "🌐 External Alerts"],
-        label_visibility="collapsed" # Oculta el título "Navigation" para más limpieza
-    )
+    st.markdown("---")
     
-    st.markdown("---") # Separador visual elegante
-    
-    # --- B. AI ASSISTANT (ZONA INFERIOR) ---
-    st.subheader("🤖 AI Assistant")
-    
-    # Carga de archivo
+    # --- A. CARGA DE ARCHIVO (Contexto Global) ---
     uploaded = st.file_uploader("Upload Context (PDF)", type=["pdf"], key="sidebar_uploader")
     
     contract_text = ""
     if uploaded:
         contract_text = extract_text_from_pdf(uploaded)
         st.success("✅ Context Active")
+    
+    st.markdown("---")
+    
+    # --- B. AI ASSISTANT (CHAT) ---
+    st.subheader("🤖 AI Assistant")
     
     # Chat History Container
     chat_container = st.container()
@@ -77,7 +72,7 @@ with st.sidebar:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
     
-    # Input del Chat (Se ancla al fondo automáticamente)
+    # Input del Chat (Se ancla al fondo)
     if prompt := st.chat_input("Ask AI..."):
         # 1. Guardar
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -99,11 +94,18 @@ with st.sidebar:
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
 
+# -------------------------------
+# 4. ÁREA PRINCIPAL CON PESTAÑAS (TABS)
+# -------------------------------
+
+# Creamos las 3 pestañas
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Contract Analysis", "🌐 External Alerts"])
+
 # ==============================================================
-# PÁGINA 1: DASHBOARD
+# PESTAÑA 1: DASHBOARD
 # ==============================================================
-if page == "📊 Dashboard":
-    st.header("📊 Procurement Dashboard")
+with tab1:
+    st.header("Procurement Overview")
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Contracts", "15")
@@ -123,14 +125,12 @@ if page == "📊 Dashboard":
     st.dataframe(df, use_container_width=True)
 
 # ==============================================================
-# PÁGINA 2: ANÁLISIS DE CONTRATO (VISUALIZACIÓN)
+# PESTAÑA 2: ANÁLISIS DE CONTRATO
 # ==============================================================
-elif page == "📘 Contract Analysis":
-    st.header("📘 Contract Analysis View")
+with tab2:
+    st.header("Detailed Analysis")
     
     if contract_text:
-        st.info("💡 You can chat with this contract using the sidebar on the left.")
-        
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Auto-Summary")
@@ -146,17 +146,18 @@ elif page == "📘 Contract Analysis":
                     res = ask_ibm_watson(f"List 3 risks in this contract: {contract_text[:3000]}")
                     st.warning(res)
 
+        st.markdown("---")
         with st.expander("📄 View Full Contract Text"):
             st.text(contract_text)
             
     else:
-        st.warning("👈 Please upload a PDF in the Sidebar to activate this view.")
+        st.info("👈 Please upload a PDF in the Sidebar to activate the analysis tools.")
 
 # ==============================================================
-# PÁGINA 3: NOTICIAS
+# PESTAÑA 3: NOTICIAS
 # ==============================================================
-elif page == "🌐 External Alerts":
-    st.header("🌐 Global Supply Chain Alerts")
+with tab3:
+    st.header("Global Supply Chain Alerts")
     
     col1, col2 = st.columns([3, 1])
     with col1:
