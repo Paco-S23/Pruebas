@@ -5,7 +5,7 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
 # -------------------------------
-# 1. CONFIGURACIÓN E INICIO
+# 1. CONFIGURACIÓN GENERAL
 # -------------------------------
 st.set_page_config(page_title="ProcureWatch • AI", layout="wide")
 
@@ -14,11 +14,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # -------------------------------
-# 2. FUNCIONES OPTIMIZADAS (CACHÉ)
+# 2. FUNCIONES (OPTIMIZADAS CON CACHÉ)
 # -------------------------------
 
-# ESTA FUNCIÓN EVITA QUE SE TRABE
-# @st.cache_data guarda el resultado. Si subes el mismo PDF, no lo procesa de nuevo.
+# ESTA ES LA CLAVE PARA QUE NO SE TRABE
+# Guarda el texto en memoria para no volver a leer el PDF a cada rato
 @st.cache_data
 def extract_text_from_pdf(uploaded_file):
     with pdfplumber.open(uploaded_file) as pdf:
@@ -35,7 +35,7 @@ def ask_ibm_watson(prompt_text):
     
     parameters = {
         GenParams.DECODING_METHOD: "greedy",
-        GenParams.MAX_NEW_TOKENS: 300, # Un poco menos para que responda rápido en el chat
+        GenParams.MAX_NEW_TOKENS: 400,
         GenParams.MIN_NEW_TOKENS: 1,
         GenParams.REPETITION_PENALTY: 1.1
     }
@@ -47,108 +47,138 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# 3. BARRA LATERAL (SIDEBAR) - AQUÍ VIVE EL CHAT AHORA
+# 3. BARRA LATERAL (NAVEGACIÓN + CHAT)
 # -------------------------------
 with st.sidebar:
-    st.title("🤖 AI Assistant")
+    st.header("Navigation")
     
-    # --- ZONA DE CARGA (Siempre visible para dar contexto) ---
-    uploaded = st.file_uploader("Upload Context (PDF)", type=["pdf"], key="sidebar_uploader")
+    # Mantenemos tu estructura de 3 páginas
+    page = st.sidebar.radio(
+        "Go to:", 
+        ["Dashboard", "Contract Analysis", "External Risk Alerts"]
+    )
+    
+    st.markdown("---")
+    st.subheader("🤖 AI Assistant")
+    
+    # ZONA DE CARGA (En el sidebar para dar contexto siempre)
+    uploaded = st.file_uploader("Upload PDF (Context)", type=["pdf"], key="sidebar_uploader")
     
     contract_text = ""
     if uploaded:
-        # Usamos la función con caché para que no se trabe
-        contract_text = extract_text_from_pdf(uploaded)
-        st.success("✅ Contract Loaded")
+        contract_text = extract_text_from_pdf(uploaded) # Usa la función con caché
+        st.success("✅ Context Loaded")
     
-    st.markdown("---")
-    
-    # --- CHATBOT EN EL SIDEBAR ---
-    # Contenedor para los mensajes (para que aparezcan arriba del input)
-    messages_container = st.container()
-    
-    # Mostramos historial
-    with messages_container:
+    # ZONA DE CHAT (En el sidebar)
+    # Contenedor para mensajes
+    chat_container = st.container()
+    with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
     
-    # Input del chat (Se ancla al fondo del sidebar automáticamente)
-    if prompt := st.chat_input("Ask me anything..."):
-        
-        # 1. Guardar y mostrar mensaje usuario
+    # Input del chat
+    if prompt := st.chat_input("Ask about the contract..."):
+        # 1. Guardar y mostrar
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with messages_container:
+        with chat_container:
             with st.chat_message("user"):
                 st.markdown(prompt)
         
-        # 2. Preparar Prompt
+        # 2. Preparar contexto
         if contract_text:
             final_prompt = f"""
-            Context: {contract_text[:3000]}
+            Context (Contract): {contract_text[:3000]}
             User Question: {prompt}
-            Answer based on context:
+            Answer:
             """
         else:
             final_prompt = f"User Question: {prompt}\nAnswer as a helpful assistant:"
 
-        # 3. Generar respuesta
-        with messages_container:
+        # 3. Responder
+        with chat_container:
             with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
+                with st.spinner("..."):
                     response = ask_ibm_watson(final_prompt)
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
 
-# -------------------------------
-# 4. PÁGINA PRINCIPAL (MAIN AREA)
-# -------------------------------
-st.title("📑 ProcureWatch Dashboard")
-
-# Menú de navegación superior (Pestañas) para aprovechar el espacio
-tab1, tab2 = st.tabs(["📊 Dashboard", "🌐 Risk Alerts"])
-
-with tab1:
-    st.header("Contract Overview")
+# ==============================================================
+# PÁGINA 1: DASHBOARD
+# ==============================================================
+if page == "Dashboard":
+    st.header("📊 Procurement Dashboard")
     
-    # KPIs
     col1, col2, col3 = st.columns(3)
-    col1.metric("Analyzed Contracts", "12")
-    col2.metric("High Risks", "2", "Critical", delta_color="inverse")
-    col3.metric("Pending", "5")
+    col1.metric("Contracts", "15")
+    col2.metric("High Risk", "3", "Warning", delta_color="inverse")
+    col3.metric("Pending", "7")
     
     st.markdown("---")
+    st.subheader("Active Contracts")
     
-    # Tabla (Índice corregido iniciando en 1)
+    # --- TU PETICIÓN: ÍNDICE INICIA EN 1 ---
     df = pd.DataFrame([
         {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
         {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
         {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
     ])
-    df.index = df.index + 1
+    
+    df.index = df.index + 1  # <--- AQUÍ ESTÁ EL CAMBIO
+    
     st.dataframe(df, use_container_width=True)
-    
-    # Si hay contrato subido, mostramos su texto aquí también
-    if contract_text:
-        st.markdown("---")
-        st.subheader("📄 Current Contract Content")
-        with st.expander("Click to view full text"):
-            st.text(contract_text)
 
-with tab2:
-    st.header("Global Supply Chain Alerts")
+# ==============================================================
+# PÁGINA 2: ANÁLISIS (DETALLES)
+# ==============================================================
+elif page == "Contract Analysis":
+    st.header("📘 Contract Details")
     
-    col_search, col_btn = st.columns([4,1])
-    query = col_search.text_input("Search News", "Logistics")
-    if col_btn.button("Search"):
-        st.info(f"Showing results for: {query}")
+    if contract_text:
+        st.success("PDF Content is ready for analysis.")
         
-        st.subheader("Strike at Montreal Port")
-        st.caption("Logistics Daily • 2h ago")
+        # Opciones extra de análisis (Json, Resumen)
+        col_btn1, col_btn2 = st.columns(2)
+        
+        if col_btn1.button("📄 Generate Summary"):
+            with st.spinner("Summarizing..."):
+                prompt_sum = f"Summarize this contract in 3 sentences:\n{contract_text[:3000]}"
+                st.info(ask_ibm_watson(prompt_sum))
+                
+        if col_btn2.button("⚠️ Detect Risks (JSON)"):
+            with st.spinner("Detecting..."):
+                prompt_json = f"Extract risks in JSON format from:\n{contract_text[:3000]}"
+                st.code(ask_ibm_watson(prompt_json), language="json")
+                
+        with st.expander("View Full Text"):
+            st.text(contract_text)
+    else:
+        st.info("Please upload a PDF in the Sidebar 👈 to start analyzing.")
+
+# ==============================================================
+# PÁGINA 3: NOTICIAS (EXTERNAL ALERTS)
+# ==============================================================
+elif page == "External Risk Alerts":
+    st.header("🌐 Global Supply Chain Alerts")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        query = st.text_input("Search news (Simulated):", "construction materials")
+    with col2:
+        st.write("") 
+        st.write("") 
+        search_btn = st.button("Search News")
+    
+    if search_btn or query:
+        st.markdown(f"**Latest updates for:** `{query}`")
+        st.markdown("---")
+        
+        st.subheader("Strike at Montreal Port affects cement logistics")
+        st.caption("Source: Logistics Daily • 2 hours ago")
         st.error("🔴 High Impact")
         
-        st.divider()
+        st.markdown("---")
         
-        st.subheader("Aluminum Prices Stable")
-        st.caption("Global Trade • 5h ago")
+        st.subheader("Aluminum price stabilizes in EU market")
+        st.caption("Source: Global Trade • 5 hours ago")
         st.success("🟢 Low Impact")
