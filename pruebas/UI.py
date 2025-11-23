@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import streamlit.components.v1 as components # Librería para el embebido
+import PyPDF2  # <--- NUEVA LIBRERÍA PARA LEER PDFs
+import streamlit.components.v1 as components
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
@@ -58,7 +59,6 @@ contracts_db = {
 
 # --- MOTOR LLM (CEREBRO DE IBM) ---
 def call_ibm_llm(prompt):
-    # NOTA: Asegúrate de que esta API Key esté activa y tenga permisos
     creds = {
         "url": "https://us-south.ml.cloud.ibm.com",
         "apikey": "7df1e07ee763823210cc7609513c0c6fe4ff613cc3583613def0ec12f2570a17"
@@ -99,7 +99,7 @@ def agent_web_searcher(user_query):
     # RECUERDA PONER TU API KEY REAL DE NEWSAPI AQUI
     api_key = "TU_API_KEY_DE_NEWSAPI_AQUI" 
      
-    if api_key == "ApiKey-600b86eb-d0f4-4e1a-85c9-0b737fd11aa0":
+    if api_key == "TU_API_KEY_DE_NEWSAPI_AQUI":
         return "⚠️ NewsAPI Key missing. Simulation: Found recent news about supply chain disruptions in logistics sectors."
 
     url = f"https://newsapi.org/v2/everything?q={clean_query}&sortBy=publishedAt&apiKey={api_key}&language=en&pageSize=3"
@@ -142,21 +142,33 @@ with st.sidebar:
     st.caption("Multi-Agent System Active")
     st.markdown("---")
     
-    st.subheader("📂 Cargar Contrato")
-    # Widget para subir archivo real
-    uploaded_file = st.file_uploader("Sube tu contrato (.txt)", type=["txt"])
+    st.subheader("📂 Cargar Contrato (PDF)")
+    # CAMBIO AQUI: Aceptamos type="pdf"
+    uploaded_file = st.file_uploader("Sube tu contrato (.pdf)", type=["pdf"])
     
     contract_text = ""
     selected_contract_name = ""
 
     if uploaded_file is not None:
-        # CASO 1: El usuario subió un archivo
+        # CASO 1: El usuario subió un PDF
         try:
-            contract_text = uploaded_file.getvalue().decode("utf-8")
+            # Lógica de lectura de PDF con PyPDF2
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            extracted_text = ""
+            # Iteramos por todas las páginas para extraer el texto
+            for page in pdf_reader.pages:
+                extracted_text += page.extract_text() + "\n"
+            
+            contract_text = extracted_text
             selected_contract_name = uploaded_file.name
-            st.success(f"✅ Archivo cargado: {selected_contract_name}")
-        except:
-            st.error("Error leyendo el archivo. Asegúrate de que sea un .txt válido.")
+            
+            if len(contract_text) < 10:
+                st.warning("⚠️ El PDF parece estar vacío o es una imagen escaneada (sin texto seleccionable).")
+            else:
+                st.success(f"✅ PDF Procesado: {selected_contract_name}")
+                
+        except Exception as e:
+            st.error(f"Error leyendo el PDF: {e}")
     else:
         # CASO 2: No hay archivo, usamos la Base de Datos de Ejemplo
         st.info("ℹ️ Modo Demo (Usa el desplegable)")
@@ -209,7 +221,9 @@ with st.sidebar:
                         
                     elif decision == "DOC_AGENT":
                         agent_name = "📄 Document Agent"
-                        final_response = agent_document_reader(prompt, contract_text)
+                        # Recortamos un poco el texto si es muy largo para no romper el token limit
+                        text_to_analyze = contract_text[:15000] 
+                        final_response = agent_document_reader(prompt, text_to_analyze)
                         
                     else:
                         agent_name = "🤖 General Assistant"
@@ -287,12 +301,15 @@ with tab2:
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Generate Summary"):
+            # Recorte de seguridad para no saturar el prompt
+            safe_text = contract_text[:10000] 
             with st.spinner("Analyzing contract text..."):
-                st.write(call_ibm_llm(f"Summarize this contract considering user is a procurement officer: {contract_text}"))
+                st.write(call_ibm_llm(f"Summarize this contract considering user is a procurement officer: {safe_text}"))
     with c2:
         if st.button("Scan Risks"):
+            safe_text = contract_text[:10000]
             with st.spinner("Scanning for risks..."):
-                st.warning(call_ibm_llm(f"Find high risk clauses in this text: {contract_text}"))
+                st.warning(call_ibm_llm(f"Find high risk clauses in this text: {safe_text}"))
             
     with st.expander("View Full Contract Text"):
         st.code(contract_text)
