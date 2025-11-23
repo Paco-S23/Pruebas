@@ -11,9 +11,9 @@ from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenP
 st.set_page_config(page_title="ProcureWatch • AI", layout="wide")
 
 st.title("📑 ProcureWatch")
-st.markdown("### Contract Analysis & General AI Assistant")
+st.markdown("### Contract Analysis & Supply Chain Monitor")
 
-# Inicializar memoria
+# Inicializar memorias
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "contract_text" not in st.session_state:
@@ -44,45 +44,59 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# BARRA LATERAL
+# BARRA LATERAL (NAVEGACIÓN)
 # -------------------------------
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to:", ["Dashboard", "AI Chat & Analysis"])
+
+# AQUÍ ESTÁN LAS 3 OPCIONES
+page = st.sidebar.radio(
+    "Go to:", 
+    ["Dashboard", "AI Chat & Analysis", "External Risk Alerts"]
+)
+
 st.sidebar.markdown("---")
 
+# Indicador de estado del contrato
 if st.session_state.contract_text:
-    st.sidebar.success("📄 Contract Loaded in Memory")
-    if st.sidebar.button("🗑️ Clear Contract"):
+    st.sidebar.success("📄 Contract Loaded")
+    if st.sidebar.button("🗑️ Unload Contract"):
         st.session_state.contract_text = ""
-        st.experimental_rerun()
-else:
-    st.sidebar.info("Upload a PDF to enable contract analysis mode.")
+        st.rerun()
 
 # ==============================================================
 # PÁGINA 1: DASHBOARD
 # ==============================================================
 if page == "Dashboard":
-    st.header("📊 Dashboard")
+    st.header("📊 Procurement Dashboard")
     col1, col2, col3 = st.columns(3)
     col1.metric("Contracts", "15")
-    col2.metric("Risks", "3", "High")
+    col2.metric("High Risk", "3", "Warning", delta_color="inverse")
     col3.metric("Pending", "7")
+    
+    st.markdown("---")
+    st.subheader("Active Contracts")
+    st.dataframe(pd.DataFrame([
+        {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
+        {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
+        {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
+    ]), use_container_width=True)
 
 # ==============================================================
 # PÁGINA 2: CHAT GENERAL Y ANÁLISIS
 # ==============================================================
 elif page == "AI Chat & Analysis":
     
-    # 1. ZONA DE CARGA (Opcional)
-    with st.expander("📂 Upload Contract (Optional)", expanded=not st.session_state.contract_text):
+    # 1. ZONA DE CARGA (Opcional, se colapsa si ya cargaste algo)
+    with st.expander("📂 Upload Contract (Optional for context)", expanded=not st.session_state.contract_text):
         uploaded = st.file_uploader("Upload PDF", type=["pdf"])
         if uploaded:
             with pdfplumber.open(uploaded) as pdf:
                 text = "\n".join([page.extract_text() or "" for page in pdf.pages])
                 st.session_state.contract_text = text
-            st.success("PDF processed! The AI now knows the context of this document.")
+            st.success("PDF processed! The AI is now context-aware.")
+            st.rerun()
 
-    # 2. CHATBOT (Funciona siempre)
+    # 2. CHATBOT INTERACTIVO
     st.subheader("💬 AI Assistant")
     
     # Mostrar historial
@@ -92,7 +106,7 @@ elif page == "AI Chat & Analysis":
 
     # Input del usuario
     if prompt := st.chat_input("Ask about the contract or anything else..."):
-        # Guardar usuario
+        # Guardar mensaje usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -102,7 +116,6 @@ elif page == "AI Chat & Analysis":
             with st.spinner("Thinking..."):
                 
                 # LÓGICA HÍBRIDA:
-                # Si hay contrato, lo metemos en el prompt. Si no, es chat general.
                 if st.session_state.contract_text:
                     final_prompt = f"""
                     Context (Contract Text):
@@ -110,12 +123,12 @@ elif page == "AI Chat & Analysis":
                     
                     User Question: {prompt}
                     
-                    Instruction: Answer based on the contract if relevant. If the question is general, answer using your general knowledge.
+                    Instruction: Answer based on the contract if relevant. If not, answer generally.
                     Answer:
                     """
                 else:
                     final_prompt = f"""
-                    Act as a helpful AI assistant for procurement and business.
+                    Act as a supply chain expert AI.
                     User Question: {prompt}
                     Answer:
                     """
@@ -123,3 +136,43 @@ elif page == "AI Chat & Analysis":
                 response = ask_ibm_watson(final_prompt)
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
+
+# ==============================================================
+# PÁGINA 3: NOTICIAS (EXTERNAL ALERTS) - ¡AQUÍ ESTÁ!
+# ==============================================================
+elif page == "External Risk Alerts":
+    st.header("🌐 Global Supply Chain Alerts")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        query = st.text_input("Search news (Simulated):", "construction materials")
+    with col2:
+        st.write("") # Espacio
+        st.write("") 
+        search_btn = st.button("Search News")
+    
+    if search_btn or query:
+        st.markdown(f"**Latest updates for:** `{query}`")
+        st.markdown("---")
+        
+        # Noticia 1
+        st.subheader("Strike at Montreal Port affects cement logistics")
+        st.caption("Source: Logistics Daily • 2 hours ago")
+        st.error("🔴 High Impact")
+        st.write("Potential delay of 2-3 weeks for incoming shipments due to union strikes.")
+        
+        st.markdown("---")
+        
+        # Noticia 2
+        st.subheader("Aluminum price stabilizes in EU market")
+        st.caption("Source: Global Trade • 5 hours ago")
+        st.success("🟢 Low Impact")
+        st.write("Prices have normalized after last month's volatility.")
+
+        st.markdown("---")
+
+        # Noticia 3
+        st.subheader("New regulations for steel imports in Mexico")
+        st.caption("Source: Business World • 1 day ago")
+        st.warning("🟠 Medium Impact")
+        st.write("New tariffs may affect cost projection for Q1 2026.")
