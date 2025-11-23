@@ -1,92 +1,121 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import requests
+import os
+from dotenv import load_dotenv
 
-# ==========================================
-# Configuración de la página
-# ==========================================
-st.set_page_config(page_title="IBM Agents - Web Chat", layout="wide")
+load_dotenv()
 
-st.title("🤖 IBM Watson Orchestrate Agents")
-st.write("Selecciona un agente en el menú de la izquierda para interactuar.")
+# ============================
+# Configuration
+# ============================
+API_KEY = os.getenv("WATSONX_APIKEY")
+PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
+AGENT_1_ID = os.getenv("AGENT_1_ID")
+AGENT_2_ID = os.getenv("AGENT_2_ID")
 
-# ==========================================
-# Definición de las Credenciales (Extraídas de tus scripts)
-# ==========================================
-# Configuración común para ambos agentes
-COMMON_CONFIG = {
-    "orchestrationID": "03ada0a325ec426d893eef11d68e7d31_f322ed2b-accb-4baa-a7e9-3d0419313afc",
-    "hostURL": "https://jp-tok.watson-orchestrate.cloud.ibm.com",
-    "crn": "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::"
-}
+BASE_URL = "https://us-south.ml.cloud.ibm.com"
+AGENT_URL = f"{BASE_URL}/watsonx/agents/v1/agent_runs"
 
-# Configuración específica por Agente
-AGENTS = {
-    "Agente 1": {
-        "agentId": "df87f2d2-3200-4788-b0bd-de2033f818ee",
-        "agentEnvironmentId": "f9558573-5f2c-4fc7-bdc3-09c8d590f7de"
-    },
-    "Agente 2": {
-        "agentId": "ab2a2d5a-feb8-4756-b8cb-57d78bbb085c",
-        "agentEnvironmentId": "3ed7b3a1-c9d5-4d20-8ace-beda0ab22455"
+
+# ============================
+# Correct Token Function
+# ============================
+def get_token():
+    url = "https://iam.cloud.ibm.com/identity/token"
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
     }
-}
 
-# ==========================================
-# Selector de Agente
-# ==========================================
-agent_selection = st.sidebar.radio("Elige tu Agente:", ["Agente 1", "Agente 2"])
+    data = (
+        f"grant_type=urn:ibm:params:oauth:grant-type:apikey"
+        f"&apikey={API_KEY}"
+    )
 
-# ==========================================
-# Generador de HTML para el Chat
-# ==========================================
-def get_chat_html(agent_name):
-    config = AGENTS[agent_name]
-    
-    # Creamos el HTML completo inyectando las variables correctas
-    html_code = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ margin: 0; padding: 0; background-color: #f0f2f6; font-family: sans-serif; }}
-            #root {{ width: 100%; height: 600px; }}
-        </style>
-    </head>
-    <body>
-        <div id="root"></div>
+    res = requests.post(url, headers=headers, data=data)
 
-        <script>
-          window.wxOConfiguration = {{
-            orchestrationID: "{COMMON_CONFIG['orchestrationID']}",
-            hostURL: "{COMMON_CONFIG['hostURL']}",
-            rootElementID: "root",
-            deploymentPlatform: "ibmcloud",
-            crn: "{COMMON_CONFIG['crn']}",
-            chatOptions: {{
-                agentId: "{config['agentId']}", 
-                agentEnvironmentId: "{config['agentEnvironmentId']}",
-            }}
-          }};
+    if res.status_code != 200:
+        print(res.text)
+        return None
 
-          setTimeout(function () {{
-            const script = document.createElement('script');
-            script.src = "{COMMON_CONFIG['hostURL']}/wxochat/wxoLoader.js?embed=true";
-            script.addEventListener('load', function () {{
-                wxoLoader.init();
-            }});
-            document.head.appendChild(script);
-          }}, 0);
-        </script>
-    </body>
-    </html>
-    """
-    return html_code
+    return res.json().get("access_token")
 
-# ==========================================
-# Renderizado
-# ==========================================
-st.subheader(f"Conectado con: {agent_selection}")
 
-# Renderizamos el HTML dentro de un iframe de Streamlit
-# Height=700 para dar espacio al chat completo
-components.html(get_chat_html(agent_selection), height=700, scrolling=True)
+# ============================
+# Send message to Agent
+# ============================
+def call_agent(agent_id, user_message):
+
+    token = get_token()
+    if token is None:
+        return "❌ Error: Unable to obtain authentication token."
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "agent_id": agent_id,
+        "project_id": PROJECT_ID,
+        "input": {
+            "messages": [
+                {"role": "user", "content": user_message}
+            ]
+        }
+    }
+
+    res = requests.post(AGENT_URL, headers=headers, json=payload)
+
+    if res.status_code != 200:
+        return f"❌ API Error:\n{res.text}"
+
+    try:
+        return res.json()["output"]["messages"][0]["content"]
+    except:
+        return "❌ Error processing the agent's response."
+
+
+# =========================================================
+# UI — No sidebar, 2 tabs
+# =========================================================
+st.set_page_config(page_title="IBM Agents UI", layout="centered")
+
+st.title("🤖 IBM Watsonx Agents")
+st.write("Interact with your agents easily.")
+
+tabs = st.tabs(["Agent 1", "Agent 2"])
+
+# ------------------------
+# Agent 1 Tab
+# ------------------------
+with tabs[0]:
+    st.subheader("Agent 1")
+
+    text1 = st.text_area("Write your question:", key="msg1")
+
+    if st.button("Send to Agent 1"):
+        if text1.strip() == "":
+            st.warning("Please enter a message.")
+        else:
+            response = call_agent(AGENT_1_ID, text1)
+            st.write("### Response:")
+            st.write(response)
+
+
+# ------------------------
+# Agent 2 Tab
+# ------------------------
+with tabs[1]:
+    st.subheader("Agent 2")
+
+    text2 = st.text_area("Write your question:", key="msg2")
+
+    if st.button("Send to Agent 2"):
+        if text2.strip() == "":
+            st.warning("Please enter a message.")
+        else:
+            response = call_agent(AGENT_2_ID, text2)
+            st.write("### Response:")
+            st.write(response)
