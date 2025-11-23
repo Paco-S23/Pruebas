@@ -193,7 +193,7 @@ with st.sidebar:
 # -------------------------------
 # 4. ÁREA PRINCIPAL (TABS)
 # -------------------------------
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Contract Analysis", "🌐 External Alerts"])
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Internal Contract Monitor", "🌐 Construction & Supply Chain Risk Monitor"])
 
 # PESTAÑA 1: DASHBOARD
 with tab1:
@@ -214,7 +214,7 @@ with tab1:
 
 # PESTAÑA 2: ANÁLISIS
 with tab2:
-    st.header("Document Agent View")
+    st.header("Cross-reference all contracts against actual warehouse records to identify compliance issues, delivery failures, and specification mismatches.")
     if contract_text:
         c1, c2 = st.columns(2)
         with c1:
@@ -230,7 +230,7 @@ with tab2:
 
 # PESTAÑA 3: NOTICIAS
 with tab3:
-    st.header("Search Agent View")
+    st.header("Scans online sources to detect external events that may impact the supply chain or specific contracts.")
     query = st.text_input("Manual Search:", "Supply Chain")
     if st.button("Run Search Agent"):
         with st.spinner("Agent searching..."):
@@ -238,4 +238,5 @@ with tab3:
             results = agent_web_searcher(query)
             st.success("Search Complete")
             st.write(results)
+
 
