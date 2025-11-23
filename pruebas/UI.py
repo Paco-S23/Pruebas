@@ -67,7 +67,7 @@ with st.sidebar:
     with col_title:
         st.subheader("🤖 Chat")
     with col_btn:
-        # BOTÓN PARA BORRAR COMENTARIOS
+        # BOTÓN PARA BORRAR
         if st.button("🗑️ Clear", type="primary"):
             st.session_state.messages = []
             st.rerun()
@@ -90,8 +90,101 @@ with st.sidebar:
             with st.chat_message("user"):
                 st.markdown(prompt)
         
-        # 2. Prompt
+        # 2. Prompt (AQUÍ ESTABA EL ERROR, CORREGIDO CON TRIPLE COMILLA)
         if contract_text:
-            final_prompt = f"Context: {contract_text[:3000]}\nQuestion: {prompt}\nAnswer:"
+            final_prompt = f"""Context: {contract_text[:3000]}
+            Question: {prompt}
+            Answer:"""
         else:
-            final_prompt = f"
+            final_prompt = f"""Question: {prompt}
+            Answer as expert:"""
+
+        # 3. Respuesta
+        with chat_container:
+            with st.chat_message("assistant"):
+                with st.spinner("..."):
+                    response = ask_ibm_watson(final_prompt)
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+
+# -------------------------------
+# 4. ÁREA PRINCIPAL CON PESTAÑAS (TABS)
+# -------------------------------
+
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Contract Analysis", "🌐 External Alerts"])
+
+# ==============================================================
+# PESTAÑA 1: DASHBOARD
+# ==============================================================
+with tab1:
+    st.header("Procurement Overview")
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Contracts", "15")
+    col2.metric("High Risk", "3", "Warning", delta_color="inverse")
+    col3.metric("Pending", "7")
+    
+    st.markdown("---")
+    st.subheader("Active Contracts")
+    
+    df = pd.DataFrame([
+        {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
+        {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
+        {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
+    ])
+    df.index = df.index + 1
+    st.dataframe(df, use_container_width=True)
+
+# ==============================================================
+# PESTAÑA 2: ANÁLISIS DE CONTRATO
+# ==============================================================
+with tab2:
+    st.header("Detailed Analysis")
+    
+    if contract_text:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Auto-Summary")
+            if st.button("Generate Summary"):
+                with st.spinner("Processing..."):
+                    res = ask_ibm_watson(f"Summarize this: {contract_text[:3000]}")
+                    st.write(res)
+        
+        with col2:
+            st.subheader("Risk Detection")
+            if st.button("Scan for Risks"):
+                with st.spinner("Scanning..."):
+                    res = ask_ibm_watson(f"List 3 risks in this contract: {contract_text[:3000]}")
+                    st.warning(res)
+
+        st.markdown("---")
+        with st.expander("📄 View Full Contract Text"):
+            st.text(contract_text)
+            
+    else:
+        st.info("👈 Please upload a PDF in the Sidebar to activate the analysis tools.")
+
+# ==============================================================
+# PESTAÑA 3: NOTICIAS
+# ==============================================================
+with tab3:
+    st.header("Global Supply Chain Alerts")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        query = st.text_input("Search news:", "construction materials")
+    with col2:
+        st.write("") 
+        st.write("") 
+        search_btn = st.button("Search")
+    
+    if search_btn or query:
+        st.markdown("---")
+        st.subheader("Strike at Montreal Port")
+        st.caption("Logistics Daily • 2h ago")
+        st.error("🔴 High Impact")
+        
+        st.markdown("---")
+        st.subheader("Aluminum Prices Stable")
+        st.caption("Global Trade • 5h ago")
+        st.success("🟢 Low Impact")
