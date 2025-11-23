@@ -1,33 +1,31 @@
 import streamlit as st
 import pdfplumber
 import pandas as pd
-import json
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
 # -------------------------------
-# 1. CONFIGURACIÓN GENERAL
+# 1. CONFIGURACIÓN E INICIO
 # -------------------------------
-st.set_page_config(
-    page_title="ProcureWatch • AI",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="ProcureWatch • AI", layout="wide")
 
-st.title("📑 ProcureWatch")
-st.markdown("### Contract Analysis & Supply Chain Monitor")
-
-# Inicializar memorias de sesión (Chat y Contrato)
+# Inicializar memoria del chat
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "contract_text" not in st.session_state:
-    st.session_state.contract_text = ""
 
 # -------------------------------
-# 2. BACKEND IBM WATSON (IA)
+# 2. FUNCIONES OPTIMIZADAS (CACHÉ)
 # -------------------------------
+
+# ESTA FUNCIÓN EVITA QUE SE TRABE
+# @st.cache_data guarda el resultado. Si subes el mismo PDF, no lo procesa de nuevo.
+@st.cache_data
+def extract_text_from_pdf(uploaded_file):
+    with pdfplumber.open(uploaded_file) as pdf:
+        text = "\n".join([page.extract_text() or "" for page in pdf.pages])
+    return text
+
 def ask_ibm_watson(prompt_text):
-    # TUS CREDENCIALES
     creds = {
         "url": "https://us-south.ml.cloud.ibm.com",
         "apikey": "7df1e07ee763823210cc7609513c0c6fe4ff613cc3583613def0ec12f2570a17"
@@ -37,7 +35,7 @@ def ask_ibm_watson(prompt_text):
     
     parameters = {
         GenParams.DECODING_METHOD: "greedy",
-        GenParams.MAX_NEW_TOKENS: 500,
+        GenParams.MAX_NEW_TOKENS: 300, # Un poco menos para que responda rápido en el chat
         GenParams.MIN_NEW_TOKENS: 1,
         GenParams.REPETITION_PENALTY: 1.1
     }
@@ -49,147 +47,108 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# 3. BARRA LATERAL (NAVEGACIÓN)
+# 3. BARRA LATERAL (SIDEBAR) - AQUÍ VIVE EL CHAT AHORA
 # -------------------------------
-st.sidebar.header("Navigation")
-
-# Menú con las 3 opciones
-page = st.sidebar.radio(
-    "Go to:", 
-    ["Dashboard", "AI Chat & Analysis", "External Risk Alerts"]
-)
-
-st.sidebar.markdown("---")
-
-# Indicador de estado del contrato en memoria
-if st.session_state.contract_text:
-    st.sidebar.success("📄 Contract Loaded")
-    if st.sidebar.button("🗑️ Unload Contract"):
-        st.session_state.contract_text = ""
-        st.rerun()
-
-# ==============================================================
-# PÁGINA 1: DASHBOARD
-# ==============================================================
-if page == "Dashboard":
-    st.header("📊 Procurement Dashboard")
+with st.sidebar:
+    st.title("🤖 AI Assistant")
     
-    # KPIs Superiores
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Contracts", "15")
-    col2.metric("High Risk", "3", "Warning", delta_color="inverse")
-    col3.metric("Pending", "7")
+    # --- ZONA DE CARGA (Siempre visible para dar contexto) ---
+    uploaded = st.file_uploader("Upload Context (PDF)", type=["pdf"], key="sidebar_uploader")
+    
+    contract_text = ""
+    if uploaded:
+        # Usamos la función con caché para que no se trabe
+        contract_text = extract_text_from_pdf(uploaded)
+        st.success("✅ Contract Loaded")
     
     st.markdown("---")
-    st.subheader("Active Contracts")
     
-    # --- CORRECCIÓN DE ÍNDICE (EMPIEZA EN 1) ---
+    # --- CHATBOT EN EL SIDEBAR ---
+    # Contenedor para los mensajes (para que aparezcan arriba del input)
+    messages_container = st.container()
+    
+    # Mostramos historial
+    with messages_container:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+    
+    # Input del chat (Se ancla al fondo del sidebar automáticamente)
+    if prompt := st.chat_input("Ask me anything..."):
+        
+        # 1. Guardar y mostrar mensaje usuario
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with messages_container:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+        
+        # 2. Preparar Prompt
+        if contract_text:
+            final_prompt = f"""
+            Context: {contract_text[:3000]}
+            User Question: {prompt}
+            Answer based on context:
+            """
+        else:
+            final_prompt = f"User Question: {prompt}\nAnswer as a helpful assistant:"
+
+        # 3. Generar respuesta
+        with messages_container:
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = ask_ibm_watson(final_prompt)
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+
+# -------------------------------
+# 4. PÁGINA PRINCIPAL (MAIN AREA)
+# -------------------------------
+st.title("📑 ProcureWatch Dashboard")
+
+# Menú de navegación superior (Pestañas) para aprovechar el espacio
+tab1, tab2 = st.tabs(["📊 Dashboard", "🌐 Risk Alerts"])
+
+with tab1:
+    st.header("Contract Overview")
+    
+    # KPIs
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Analyzed Contracts", "12")
+    col2.metric("High Risks", "2", "Critical", delta_color="inverse")
+    col3.metric("Pending", "5")
+    
+    st.markdown("---")
+    
+    # Tabla (Índice corregido iniciando en 1)
     df = pd.DataFrame([
         {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
         {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
         {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
     ])
-    
-    # Aquí sumamos 1 al índice para que se vea 1, 2, 3...
     df.index = df.index + 1
-    
     st.dataframe(df, use_container_width=True)
-
-# ==============================================================
-# PÁGINA 2: CHAT GENERAL Y ANÁLISIS
-# ==============================================================
-elif page == "AI Chat & Analysis":
     
-    # 1. ZONA DE CARGA (Opcional, se colapsa si ya cargaste algo)
-    with st.expander("📂 Upload Contract (Optional for context)", expanded=not st.session_state.contract_text):
-        uploaded = st.file_uploader("Upload PDF", type=["pdf"])
-        if uploaded:
-            with pdfplumber.open(uploaded) as pdf:
-                text = "\n".join([page.extract_text() or "" for page in pdf.pages])
-                st.session_state.contract_text = text
-            st.success("PDF processed! The AI is now context-aware.")
-            st.rerun()
-
-    # 2. CHATBOT INTERACTIVO
-    st.subheader("💬 AI Assistant")
-    
-    # Mostrar historial de mensajes
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Input del usuario (Barra de chat)
-    if prompt := st.chat_input("Ask about the contract or anything else..."):
-        
-        # Guardar y mostrar mensaje del usuario
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generar respuesta de la IA
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                
-                # LÓGICA HÍBRIDA:
-                # Si hay contrato cargado, se incluye en el contexto.
-                if st.session_state.contract_text:
-                    final_prompt = f"""
-                    Context (Contract Text):
-                    {st.session_state.contract_text[:4000]}
-                    
-                    User Question: {prompt}
-                    
-                    Instruction: Answer based on the contract if relevant. If not, answer generally using your knowledge.
-                    Answer:
-                    """
-                # Si no hay contrato, actúa como experto general.
-                else:
-                    final_prompt = f"""
-                    Act as a supply chain expert AI assistant.
-                    User Question: {prompt}
-                    Answer:
-                    """
-
-                response = ask_ibm_watson(final_prompt)
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-# ==============================================================
-# PÁGINA 3: NOTICIAS (EXTERNAL ALERTS)
-# ==============================================================
-elif page == "External Risk Alerts":
-    st.header("🌐 Global Supply Chain Alerts")
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        query = st.text_input("Search news (Simulated):", "construction materials")
-    with col2:
-        st.write("") # Espacio para alinear
-        st.write("") 
-        search_btn = st.button("Search News")
-    
-    if search_btn or query:
-        st.markdown(f"**Latest updates for:** `{query}`")
+    # Si hay contrato subido, mostramos su texto aquí también
+    if contract_text:
         st.markdown("---")
+        st.subheader("📄 Current Contract Content")
+        with st.expander("Click to view full text"):
+            st.text(contract_text)
+
+with tab2:
+    st.header("Global Supply Chain Alerts")
+    
+    col_search, col_btn = st.columns([4,1])
+    query = col_search.text_input("Search News", "Logistics")
+    if col_btn.button("Search"):
+        st.info(f"Showing results for: {query}")
         
-        # Noticia 1
-        st.subheader("Strike at Montreal Port affects cement logistics")
-        st.caption("Source: Logistics Daily • 2 hours ago")
+        st.subheader("Strike at Montreal Port")
+        st.caption("Logistics Daily • 2h ago")
         st.error("🔴 High Impact")
-        st.write("Potential delay of 2-3 weeks for incoming shipments due to union strikes.")
         
-        st.markdown("---")
+        st.divider()
         
-        # Noticia 2
-        st.subheader("Aluminum price stabilizes in EU market")
-        st.caption("Source: Global Trade • 5 hours ago")
+        st.subheader("Aluminum Prices Stable")
+        st.caption("Global Trade • 5h ago")
         st.success("🟢 Low Impact")
-        st.write("Prices have normalized after last month's volatility.")
-
-        st.markdown("---")
-
-        # Noticia 3
-        st.subheader("New regulations for steel imports in Mexico")
-        st.caption("Source: Business World • 1 day ago")
-        st.warning("🟠 Medium Impact")
-        st.write("New tariffs may affect cost projection for Q1 2026.")
