@@ -1,6 +1,7 @@
 import streamlit as st
 import pdfplumber
 import pandas as pd
+import requests  # <--- NUEVA LIBRERÍA PARA CONECTAR CON LA API
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
@@ -14,14 +15,17 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # -------------------------------
-# 2. FUNCIONES (OPTIMIZADAS)
+# 2. FUNCIONES DE CONEXIÓN (BACKEND)
 # -------------------------------
+
+# A. CACHÉ DE PDF
 @st.cache_data
 def extract_text_from_pdf(uploaded_file):
     with pdfplumber.open(uploaded_file) as pdf:
         text = "\n".join([page.extract_text() or "" for page in pdf.pages])
     return text
 
+# B. IBM WATSON (YA LA TIENES)
 def ask_ibm_watson(prompt_text):
     creds = {
         "url": "https://us-south.ml.cloud.ibm.com",
@@ -43,54 +47,63 @@ def ask_ibm_watson(prompt_text):
     except Exception as e:
         return f"Error: {str(e)}"
 
+# C. NUEVA FUNCIÓN: NOTICIAS REALES (NEWS API)
+def get_real_news(query):
+    # ⚠️ PON AQUÍ TU API KEY DE NEWSAPI.ORG
+    api_key = "TU_API_KEY_DE_NEWSAPI_AQUI" 
+    
+    if api_key == "TU_API_KEY_DE_NEWSAPI_AQUI":
+        return [{"title": "Error: Missing API Key", "source": {"name": "System"}, "description": "Please get a free key at newsapi.org and paste it in the code.", "url": "#"}]
+
+    url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&apiKey={api_key}&language=en&pageSize=5"
+    
+    try:
+        response = requests.get(url)
+        data = response.json()
+        if data.get("status") == "ok":
+            return data.get("articles", [])
+        else:
+            return []
+    except:
+        return []
+
 # -------------------------------
-# 3. BARRA LATERAL (CHAT GLOBAL + UPLOADER)
+# 3. BARRA LATERAL
 # -------------------------------
 with st.sidebar:
     st.title("📑 ProcureWatch")
     st.caption("AI Supply Chain Monitor")
-    
     st.markdown("---")
     
-    # --- A. CARGA DE ARCHIVO ---
     uploaded = st.file_uploader("Upload Context (PDF)", type=["pdf"], key="sidebar_uploader")
-    
     contract_text = ""
     if uploaded:
         contract_text = extract_text_from_pdf(uploaded)
         st.success("✅ Context Active")
-    
     st.markdown("---")
     
-    # --- B. AI ASSISTANT (CHAT) ---
     col_title, col_btn = st.columns([2,1])
     with col_title:
         st.subheader("🤖 Chat")
     with col_btn:
-        # BOTÓN PARA BORRAR
         if st.button("🗑️ Clear", type="primary"):
             st.session_state.messages = []
             st.rerun()
     
-    # Chat History Container
     chat_container = st.container()
     with chat_container:
         if not st.session_state.messages:
-            st.info("👋 Hi! I'm ready to help.")
-            
+            st.info("👋 Ready to help.")
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
     
-    # Input del Chat
     if prompt := st.chat_input("Ask AI..."):
-        # 1. Guardar
         st.session_state.messages.append({"role": "user", "content": prompt})
         with chat_container:
             with st.chat_message("user"):
                 st.markdown(prompt)
         
-        # 2. Prompt (AQUÍ ESTABA EL ERROR, CORREGIDO CON TRIPLE COMILLA)
         if contract_text:
             final_prompt = f"""Context: {contract_text[:3000]}
             Question: {prompt}
@@ -99,7 +112,6 @@ with st.sidebar:
             final_prompt = f"""Question: {prompt}
             Answer as expert:"""
 
-        # 3. Respuesta
         with chat_container:
             with st.chat_message("assistant"):
                 with st.spinner("..."):
@@ -108,22 +120,18 @@ with st.sidebar:
                     st.session_state.messages.append({"role": "assistant", "content": response})
 
 # -------------------------------
-# 4. ÁREA PRINCIPAL CON PESTAÑAS (TABS)
+# 4. ÁREA PRINCIPAL (TABS)
 # -------------------------------
 
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Contract Analysis", "🌐 External Alerts"])
 
-# ==============================================================
 # PESTAÑA 1: DASHBOARD
-# ==============================================================
 with tab1:
     st.header("Procurement Overview")
-    
     col1, col2, col3 = st.columns(3)
     col1.metric("Contracts", "15")
     col2.metric("High Risk", "3", "Warning", delta_color="inverse")
     col3.metric("Pending", "7")
-    
     st.markdown("---")
     st.subheader("Active Contracts")
     
@@ -135,56 +143,58 @@ with tab1:
     df.index = df.index + 1
     st.dataframe(df, use_container_width=True)
 
-# ==============================================================
-# PESTAÑA 2: ANÁLISIS DE CONTRATO
-# ==============================================================
+# PESTAÑA 2: ANÁLISIS
 with tab2:
     st.header("Detailed Analysis")
-    
     if contract_text:
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Auto-Summary")
             if st.button("Generate Summary"):
                 with st.spinner("Processing..."):
                     res = ask_ibm_watson(f"Summarize this: {contract_text[:3000]}")
                     st.write(res)
-        
         with col2:
-            st.subheader("Risk Detection")
             if st.button("Scan for Risks"):
                 with st.spinner("Scanning..."):
-                    res = ask_ibm_watson(f"List 3 risks in this contract: {contract_text[:3000]}")
+                    res = ask_ibm_watson(f"List 3 risks: {contract_text[:3000]}")
                     st.warning(res)
-
-        st.markdown("---")
-        with st.expander("📄 View Full Contract Text"):
+        with st.expander("📄 View Full Text"):
             st.text(contract_text)
-            
     else:
-        st.info("👈 Please upload a PDF in the Sidebar to activate the analysis tools.")
+        st.info("👈 Upload a PDF in the Sidebar first.")
 
-# ==============================================================
-# PESTAÑA 3: NOTICIAS
-# ==============================================================
+# PESTAÑA 3: NOTICIAS REALES (AQUÍ ESTÁ EL CAMBIO)
 with tab3:
-    st.header("Global Supply Chain Alerts")
+    st.header("Global Supply Chain Alerts (Live)")
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        query = st.text_input("Search news:", "construction materials")
+        query = st.text_input("Search Live News:", "Supply Chain")
     with col2:
         st.write("") 
         st.write("") 
-        search_btn = st.button("Search")
+        search_btn = st.button("Search Web")
     
     if search_btn or query:
-        st.markdown("---")
-        st.subheader("Strike at Montreal Port")
-        st.caption("Logistics Daily • 2h ago")
-        st.error("🔴 High Impact")
-        
-        st.markdown("---")
-        st.subheader("Aluminum Prices Stable")
-        st.caption("Global Trade • 5h ago")
-        st.success("🟢 Low Impact")
+        with st.spinner(f"Searching latest news for: {query}..."):
+            
+            # LLAMADA A LA NUEVA FUNCIÓN DE API REAL
+            articles = get_real_news(query)
+            
+            if articles:
+                for article in articles:
+                    st.markdown("---")
+                    st.subheader(article.get("title", "No Title"))
+                    
+                    # Fuente y Fecha
+                    source_name = article.get("source", {}).get("name", "Unknown")
+                    st.caption(f"Source: {source_name}")
+                    
+                    # Descripción
+                    st.write(article.get("description", "No description available."))
+                    
+                    # Link original
+                    link = article.get("url", "#")
+                    st.markdown(f"[Read full article >]({link})")
+            else:
+                st.warning("No news found or API Key invalid.")
