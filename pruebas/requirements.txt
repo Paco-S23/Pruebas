@@ -3,3 +3,7 @@ pandas
 requests
 PyPDF2
 ibm-watson-machine-learning
+ibm_watsonx_ai
+python-dotenv
+
+
