@@ -82,7 +82,7 @@ def call_agent(agent_id, user_message):
 # =========================================================
 st.set_page_config(page_title="IBM Agents UI", layout="centered")
 
-st.title("🤖 IBM Watsonx Agents")
+st.title("SmartChain Guardian")
 st.write("Interact with your agents easily.")
 
 tabs = st.tabs(["Agent 1", "Agent 2"])
@@ -91,9 +91,11 @@ tabs = st.tabs(["Agent 1", "Agent 2"])
 # Agent 1 Tab
 # ------------------------
 with tabs[0]:
-    st.subheader("Agent 1")
+    st.subheader("nternal Contract Monitor")
 
-    text1 = st.text_area("Write your question:", key="msg1")
+    text1 = st.text_area("Cross-reference all contracts against actual warehouse records to identify compliance issues, delivery failures, and specification mismatches.
+    
+                         Write your question:", key="msg1")
 
     if st.button("Send to Agent 1"):
         if text1.strip() == "":
@@ -108,9 +110,11 @@ with tabs[0]:
 # Agent 2 Tab
 # ------------------------
 with tabs[1]:
-    st.subheader("Agent 2")
+    st.subheader("Construction & Supply Chain Risk Monitor")
 
-    text2 = st.text_area("Write your question:", key="msg2")
+    text2 = st.text_area("Scans online sources to detect external events that may impact the supply chain or specific contracts.
+    
+    Write your question:", key="msg2")
 
     if st.button("Send to Agent 2"):
         if text2.strip() == "":
@@ -119,3 +123,4 @@ with tabs[1]:
             response = call_agent(AGENT_2_ID, text2)
             st.write("### Response:")
             st.write(response)
+
