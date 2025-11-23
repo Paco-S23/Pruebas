@@ -72,14 +72,20 @@ if page == "Dashboard":
     col1.metric("Contracts", "15")
     col2.metric("High Risk", "3", "Warning", delta_color="inverse")
     col3.metric("Pending", "7")
+   st.subheader("Active Contracts")
     
-    st.markdown("---")
-    st.subheader("Active Contracts")
-    st.dataframe(pd.DataFrame([
+    # 1. Creamos la tabla primero en una variable 'df'
+    df = pd.DataFrame([
         {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
         {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
         {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
-    ]), use_container_width=True)
+    ])
+
+    # 2. EL TRUCO: Le sumamos 1 al índice (0+1, 1+1, etc.)
+    df.index = df.index + 1
+
+    # 3. Ahora sí la mostramos
+    st.dataframe(df, use_container_width=True)
 
 # ==============================================================
 # PÁGINA 2: CHAT GENERAL Y ANÁLISIS
@@ -176,3 +182,4 @@ elif page == "External Risk Alerts":
         st.caption("Source: Business World • 1 day ago")
         st.warning("🟠 Medium Impact")
         st.write("New tariffs may affect cost projection for Q1 2026.")
+
