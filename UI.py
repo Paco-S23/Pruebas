@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pdfplumber
 import pandas as pd
 
@@ -22,6 +23,42 @@ page = st.sidebar.radio(
     ["Dashboard", "Contract Monitoring", "External Risk Alerts"]
 )
 
+# --- CHAT DE IBM EN EL SIDEBAR ---
+with st.sidebar:
+    st.markdown("---")
+    st.subheader("🤖 AI Assistant")
+
+    # Código del embed de IBM
+    ibm_chat_embed = """
+    <div style="height: 550px; width: 100%;">
+        <script>
+          window.wxOConfiguration = {
+            orchestrationID: "03ada0a325ec426d893eef11d68e7d31_f322ed2b-accb-4baa-a7e9-3d0419313afc",
+            hostURL: "https://jp-tok.watson-orchestrate.cloud.ibm.com",
+            rootElementID: "root",
+            deploymentPlatform: "ibmcloud",
+            crn: "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::",
+            chatOptions: {
+                agentId: "96f81e4f-6c52-4162-9d2e-7b054586f1ed", 
+            }
+          };
+          setTimeout(function () {
+            const script = document.createElement('script');
+            script.src = `${window.wxOConfiguration.hostURL}/wxochat/wxoLoader.js?embed=true`;
+            script.addEventListener('load', function () {
+                wxoLoader.init();
+            });
+            document.head.appendChild(script);
+          }, 0);                     
+        </script>
+    </div>
+    """
+
+    # Renderizamos el componente dentro del sidebar
+    # Nota: Mantenemos la altura alta para que al abrir el chat no se corte
+    components.html(ibm_chat_embed, height=600)
+
+
 # --------------------------------------------------------------
 # KPI CARDS COMPONENT
 # --------------------------------------------------------------
@@ -29,6 +66,7 @@ def kpi_card(label, value, delta=None):
     col = st.container()
     with col:
         st.metric(label, value, delta)
+
 
 # --------------------------------------------------------------
 # RISK BADGE COMPONENT
@@ -74,7 +112,6 @@ total_contracts = len(contracts_data)
 high_risk_count = sum(contracts_data["Risk"] == "High")
 medium_risk_count = sum(contracts_data["Risk"] == "Medium")
 low_risk_count = sum(contracts_data["Risk"] == "Low")
-
 
 # ==============================================================
 # PAGE 1 • DASHBOARD
