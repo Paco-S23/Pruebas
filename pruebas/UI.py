@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-import PyPDF2  # <--- NUEVA LIBRERÍA PARA LEER PDFs
+import PyPDF2
 import streamlit.components.v1 as components
 from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
@@ -16,7 +16,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # -------------------------------
-# 2. BASE DE DATOS SIMULADA (CONTRATOS - FALLBACK)
+# 2. BASE DE DATOS SIMULADA
 # -------------------------------
 contracts_db = {
     "⚠️ Heavy Metal Solutions (High Risk)": """
@@ -56,8 +56,6 @@ contracts_db = {
 # -------------------------------
 # 3. DEFINICIÓN DE AGENTES
 # -------------------------------
-
-# --- MOTOR LLM (CEREBRO DE IBM) ---
 def call_ibm_llm(prompt):
     creds = {
         "url": "https://us-south.ml.cloud.ibm.com",
@@ -77,7 +75,7 @@ def call_ibm_llm(prompt):
     except Exception as e:
         return f"Error conectando con IBM LLM: {str(e)}"
 
-# --- SUB-AGENTE 1: DOCUMENT READER ---
+
 def agent_document_reader(user_query, context_text):
     prompt = f"""
     ACT AS: Expert Contract Lawyer.
@@ -92,12 +90,11 @@ def agent_document_reader(user_query, context_text):
     """
     return call_ibm_llm(prompt)
 
-# --- SUB-AGENTE 2: WEB SEARCHER (NEWS API) ---
+
 def agent_web_searcher(user_query):
     clean_query = user_query.replace("search", "").replace("news", "").replace("buscar", "").strip()
      
-    # RECUERDA PONER TU API KEY REAL DE NEWSAPI AQUI
-    api_key = "TU_API_KEY_DE_NEWSAPI_AQUI" 
+    api_key = "TU_API_KEY_DE_NEWSAPI_AQUI"
      
     if api_key == "TU_API_KEY_DE_NEWSAPI_AQUI":
         return "⚠️ NewsAPI Key missing. Simulation: Found recent news about supply chain disruptions in logistics sectors."
@@ -120,22 +117,19 @@ def agent_web_searcher(user_query):
     except:
         return "I tried to connect to the news feed but failed."
 
-# --- AGENTE PRINCIPAL: EL ORQUESTADOR ---
+
 def main_agent_router(user_query, has_contract_context):
     user_query_lower = user_query.lower()
      
-    # 1. Búsqueda
     if "news" in user_query_lower or "search" in user_query_lower or "alert" in user_query_lower:
         return "SEARCH_AGENT"
-    # 2. Documento
     elif has_contract_context:
         return "DOC_AGENT"
-    # 3. General
     else:
         return "GENERAL_CHAT"
 
 # -------------------------------
-# 4. UI: BARRA LATERAL (EL CHAT INTELIGENTE)
+# 4. UI: BARRA LATERAL
 # -------------------------------
 with st.sidebar:
     st.title("📑 ProcureWatch")
@@ -143,19 +137,15 @@ with st.sidebar:
     st.markdown("---")
     
     st.subheader("📂 Cargar Contrato (PDF)")
-    # CAMBIO AQUI: Aceptamos type="pdf"
     uploaded_file = st.file_uploader("Sube tu contrato (.pdf)", type=["pdf"])
     
     contract_text = ""
     selected_contract_name = ""
 
     if uploaded_file is not None:
-        # CASO 1: El usuario subió un PDF
         try:
-            # Lógica de lectura de PDF con PyPDF2
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             extracted_text = ""
-            # Iteramos por todas las páginas para extraer el texto
             for page in pdf_reader.pages:
                 extracted_text += page.extract_text() + "\n"
             
@@ -163,14 +153,13 @@ with st.sidebar:
             selected_contract_name = uploaded_file.name
             
             if len(contract_text) < 10:
-                st.warning("⚠️ El PDF parece estar vacío o es una imagen escaneada (sin texto seleccionable).")
+                st.warning("⚠️ El PDF parece estar vacío o es una imagen escaneada.")
             else:
                 st.success(f"✅ PDF Procesado: {selected_contract_name}")
                 
         except Exception as e:
             st.error(f"Error leyendo el PDF: {e}")
     else:
-        # CASO 2: No hay archivo, usamos la Base de Datos de Ejemplo
         st.info("ℹ️ Modo Demo (Usa el desplegable)")
         selected_contract_name = st.selectbox(
             "Selecciona un contrato de ejemplo:",
@@ -180,7 +169,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # B. INTERFAZ DE CHAT (SIDEBAR)
     col_t, col_b = st.columns([2,1])
     with col_t: st.subheader("🤖 Agent Chat")
     with col_b: 
@@ -196,7 +184,6 @@ with st.sidebar:
                 if "agent_used" in msg:
                     st.caption(f"Processed by: {msg['agent_used']}")
 
-    # C. INPUT Y LÓGICA
     if prompt := st.chat_input("Pregunta sobre el contrato o busca noticias..."):
         
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -204,7 +191,6 @@ with st.sidebar:
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-        # Decidimos qué agente usar
         decision = main_agent_router(prompt, bool(contract_text))
         
         final_response = ""
@@ -221,7 +207,6 @@ with st.sidebar:
                         
                     elif decision == "DOC_AGENT":
                         agent_name = "📄 Document Agent"
-                        # Recortamos un poco el texto si es muy largo para no romper el token limit
                         text_to_analyze = contract_text[:15000] 
                         final_response = agent_document_reader(prompt, text_to_analyze)
                         
@@ -243,7 +228,7 @@ with st.sidebar:
 # -------------------------------
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Internal Contract Monitor", "🌐 Construction & Supply Chain Risk Monitor"])
 
-# PESTAÑA 1: DASHBOARD
+# TAB 1 -----------------------------------------
 with tab1:
     st.header("Procurement Overview")
     c1, c2, c3 = st.columns(3)
@@ -260,17 +245,14 @@ with tab1:
     df.index = df.index + 1
     st.dataframe(df, use_container_width=True)
 
-# PESTAÑA 2: ANÁLISIS + WATSON ORCHESTRATE
+# TAB 2 -----------------------------------------
 with tab2:
     st.header("Cross-reference contracts against warehouse records")
-    
-    # Mostrar qué contrato está activo actualmente (Demo o Real)
     st.info(f"📂 Currently Analyzing: **{selected_contract_name}**")
 
-    # --- INICIO: EMBEBIDO DE WATSON ORCHESTRATE ---
-    st.subheader("💬 Watson Orchestrate Assistant")
-    
-    # Usamos components.html para inyectar el JS proporcionado
+    # Agente 1 — Internal Contract Monitor
+    st.subheader("💬 Watson Orchestrate Assistant — Contract Monitor")
+
     components.html("""
         <script>
           window.wxOConfiguration = {
@@ -281,7 +263,7 @@ with tab2:
             crn: "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::",
             chatOptions: {
                 agentId: "df87f2d2-3200-4788-b0bd-de2033f818ee", 
-                agentEnvironmentId: "f9558573-5f2c-4fc7-bdc3-09c8d590f7de",
+                agentEnvironmentId: "f9558573-5f2c-4fc7-bdc3-09c8d590f7de"
             }
           };
           setTimeout(function () {
@@ -291,17 +273,16 @@ with tab2:
                 wxoLoader.init();
             });
             document.head.appendChild(script);
-          }, 0);                      
+          }, 0);
         </script>
-    """, height=600, scrolling=False)
-    # --- FIN: EMBEBIDO DE WATSON ORCHESTRATE ---
+        <div id="root"></div>
+    """, height=650, scrolling=False)
 
     st.markdown("---")
     st.subheader("⚡ Quick AI Actions")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Generate Summary"):
-            # Recorte de seguridad para no saturar el prompt
             safe_text = contract_text[:10000] 
             with st.spinner("Analyzing contract text..."):
                 st.write(call_ibm_llm(f"Summarize this contract considering user is a procurement officer: {safe_text}"))
@@ -314,9 +295,38 @@ with tab2:
     with st.expander("View Full Contract Text"):
         st.code(contract_text)
 
-# PESTAÑA 3: NOTICIAS
+# TAB 3 -----------------------------------------
 with tab3:
     st.header("External Supply Chain Events")
+
+    # Agente 2 — Supply Chain Risk Monitor
+    st.subheader("🌐 Watson Orchestrate — Supply Chain Risk Monitor")
+
+    components.html("""
+        <script>
+          window.wxOConfiguration = {
+            orchestrationID: "03ada0a325ec426d893eef11d68e7d31_f322ed2b-accb-4baa-a7e9-3d0419313afc",
+            hostURL: "https://jp-tok.watson-orchestrate.cloud.ibm.com",
+            rootElementID: "root2",
+            deploymentPlatform: "ibmcloud",
+            crn: "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::",
+            chatOptions: {
+                agentId: "ab2a2d5a-feb8-4756-b8cb-57d78bbb085c",
+                agentEnvironmentId: "3ed7b3a1-c9d5-4d20-8ace-beda0ab22455"
+            }
+          };
+          setTimeout(function () {
+            const script = document.createElement('script');
+            script.src = `${window.wxOConfiguration.hostURL}/wxochat/wxoLoader.js?embed=true`;
+            script.addEventListener('load', function () {
+                wxoLoader.init();
+            });
+            document.head.appendChild(script);
+          }, 0);
+        </script>
+        <div id="root2"></div>
+    """, height=650, scrolling=False)
+
     query = st.text_input("Manual Search:", "Supply Chain")
     if st.button("Run Search Agent"):
         with st.spinner("Agent searching..."):
