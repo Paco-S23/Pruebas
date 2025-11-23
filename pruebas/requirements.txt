@@ -2,8 +2,6 @@ streamlit
 pandas
 requests
 PyPDF2
+python-dotenv
 ibm-watson-machine-learning
 ibm_watsonx_ai
-python-dotenv
-
-
