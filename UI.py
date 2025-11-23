@@ -2,9 +2,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pdfplumber
 import pandas as pd
+import json
+from ibm_watson_machine_learning.foundation_models import Model
+from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
 # -------------------------------
-# GENERAL CONFIGURATION
+# CONFIGURACIÓN DE LA APP
 # -------------------------------
 st.set_page_config(
     page_title="ProcureWatch • Contract & Supply Monitor",
@@ -14,8 +17,76 @@ st.set_page_config(
 st.title("📑 ProcureWatch")
 st.write("AI-powered contract monitoring and external supply-chain risk detection.")
 
+
 # -------------------------------
-# SIDEBAR NAVIGATION
+# FUNCIÓN DE IBM WATSON (Backend)
+# -------------------------------
+def analyze_contract_with_ibm(contract_text):
+    # 1. CREDENCIALES
+    creds = {
+        "url": "https://us-south.ml.cloud.ibm.com",
+        "apikey": "7df1e07ee763823210cc7609513c0c6fe4ff613cc3583613def0ec12f2570a17"
+    }
+    project_id = "077c11a6-2c5e-4c89-9a99-c08df3cb67ff"
+
+    # 2. MODELO
+    model_id = "ibm/granite-13b-chat-v2"
+
+    parameters = {
+        GenParams.DECODING_METHOD: "greedy",
+        GenParams.MAX_NEW_TOKENS: 500,
+        GenParams.MIN_NEW_TOKENS: 10,
+        GenParams.REPETITION_PENALTY: 1.1
+    }
+
+    try:
+        model = Model(
+            model_id=model_id,
+            params=parameters,
+            credentials=creds,
+            project_id=project_id
+        )
+
+        # 3. PROMPT
+        prompt = f"""
+        Analyze the following contract text and extract key information in valid JSON format.
+
+        Text:
+        {contract_text[:3000]} 
+
+        Required JSON Structure:
+        {{
+            "supplier": "Name of supplier",
+            "risk_level": "High/Medium/Low",
+            "risks": ["risk 1", "risk 2"],
+            "status": "Recommended status",
+            "summary": "Short summary of the contract"
+        }}
+
+        Output only the JSON. Do not add markdown formatting:
+        """
+
+        generated_response = model.generate_text(prompt=prompt)
+        return generated_response
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+# -------------------------------
+# COMPONENTES UI (Helpers)
+# -------------------------------
+def risk_badge(level):
+    if level == "High":
+        st.error("🔴 High Risk")
+    elif level == "Medium":
+        st.warning("🟠 Medium Risk")
+    else:
+        st.success("🟢 Low Risk")
+
+
+# -------------------------------
+# NAVEGACIÓN SIDEBAR
 # -------------------------------
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
@@ -28,7 +99,6 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🤖 AI Assistant")
 
-    # Código del embed de IBM
     ibm_chat_embed = """
     <div style="height: 550px; width: 100%;">
         <script>
@@ -53,87 +123,33 @@ with st.sidebar:
         </script>
     </div>
     """
-
-    # Renderizamos el componente dentro del sidebar
-    # Nota: Mantenemos la altura alta para que al abrir el chat no se corte
     components.html(ibm_chat_embed, height=600)
 
-
-# --------------------------------------------------------------
-# KPI CARDS COMPONENT
-# --------------------------------------------------------------
-def kpi_card(label, value, delta=None):
-    col = st.container()
-    with col:
-        st.metric(label, value, delta)
-
-
-# --------------------------------------------------------------
-# RISK BADGE COMPONENT
-# --------------------------------------------------------------
-def risk_badge(level):
-    if level == "High":
-        st.error("🔴 High Risk")
-    elif level == "Medium":
-        st.warning("🟠 Medium Risk")
-    else:
-        st.success("🟢 Low Risk")
-
-
-# --------------------------------------------------------------
-# MOCK DATA (REPLACE WITH REAL API LATER)
-# --------------------------------------------------------------
-contracts_data = pd.DataFrame([
-    {
-        "Supplier": "Cement Quebec Inc.",
-        "Material": "Cement",
-        "Delivery Date": "2025-02-15",
-        "Status": "Under Review",
-        "Risk": "High"
-    },
-    {
-        "Supplier": "Germany Alum Co.",
-        "Material": "Aluminum",
-        "Delivery Date": "2025-03-01",
-        "Status": "On Track",
-        "Risk": "Medium"
-    },
-    {
-        "Supplier": "Montreal SteelWorks",
-        "Material": "Steel",
-        "Delivery Date": "2025-02-20",
-        "Status": "Delayed",
-        "Risk": "High"
-    }
-])
-
-# Calculate KPIs
-total_contracts = len(contracts_data)
-high_risk_count = sum(contracts_data["Risk"] == "High")
-medium_risk_count = sum(contracts_data["Risk"] == "Medium")
-low_risk_count = sum(contracts_data["Risk"] == "Low")
-
 # ==============================================================
-# PAGE 1 • DASHBOARD
+# PÁGINA 1 • DASHBOARD
 # ==============================================================
 if page == "Dashboard":
     st.header("📊 Procurement Dashboard")
 
-    # KPI CARDS ROW
+    # Mock Data
+    contracts_data = pd.DataFrame([
+        {"Supplier": "Cement Quebec Inc.", "Material": "Cement", "Risk": "High"},
+        {"Supplier": "Germany Alum Co.", "Material": "Aluminum", "Risk": "Medium"},
+        {"Supplier": "Montreal SteelWorks", "Material": "Steel", "Risk": "High"}
+    ])
+
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Contracts", total_contracts)
-    col2.metric("High Risk", high_risk_count)
-    col3.metric("Medium Risk", medium_risk_count)
-    col4.metric("Low Risk", low_risk_count)
+    col1.metric("Total Contracts", 3)
+    col2.metric("High Risk", 2)
+    col3.metric("Medium Risk", 1)
+    col4.metric("Low Risk", 0)
 
     st.markdown("---")
     st.subheader("📄 Active Contracts Overview")
-
     st.dataframe(contracts_data, use_container_width=True)
 
-
 # ==============================================================
-# PAGE 2 • CONTRACT MONITORING
+# PÁGINA 2 • CONTRACT MONITORING (LÓGICA CORREGIDA)
 # ==============================================================
 elif page == "Contract Monitoring":
     st.header("📘 Contract Monitoring")
@@ -145,69 +161,54 @@ elif page == "Contract Monitoring":
             text = "\n".join([page.extract_text() or "" for page in pdf.pages])
 
         st.subheader("Extracted Contract Text")
-        st.text_area("Content", text, height=250)
+        st.text_area("Content", text, height=150)
 
-        if st.button("Analyze Contract"):
-            # Mock example results (replace with IBM agent response)
-            response = {
-                "document_type": "Supply Contract",
-                "fields": {
-                    "supplier": "Cement Quebec Inc.",
-                    "quantity": "500 tons",
-                    "delivery_date": "2025-02-15",
-                    "cost": "$120,000 CAD"
-                },
-                "risks": [
-                    "Delivery date approaching with no shipment verification.",
-                    "Quality specifications missing.",
-                    "Penalty clause unclear."
-                ],
-                "risk_level": "High",
-                "status": "Under Review"
-            }
+        # --- AQUÍ ESTABA EL ERROR: FALTABA EL BOTÓN ---
+        if st.button("Analyze Contract with IBM Granite"):
 
-            st.subheader("📄 Extracted Information")
-            st.json(response["fields"])
+            with st.spinner("🤖 Consulting IBM Watson AI..."):
+                # 1. Llamar a la función
+                raw_response = analyze_contract_with_ibm(text)
 
-            st.subheader("⚠️ Risks")
-            for r in response["risks"]:
-                st.warning(r)
+                # 2. Intentar convertir el texto a JSON real
+                try:
+                    # A veces la IA devuelve texto extra, intentamos limpiar si es necesario
+                    # o confiar en que granite siga la instrucción JSON
+                    response_json = json.loads(raw_response)
 
-            st.subheader("Overall Risk Level")
-            risk_badge(response["risk_level"])
+                    st.success("Analysis Complete!")
 
-            st.subheader("Contract Status")
-            st.info(response["status"])
+                    # 3. Mostrar resultados bonitos
+                    st.subheader("📄 Extracted Information")
+                    st.write(f"**Supplier:** {response_json.get('supplier', 'Unknown')}")
+                    st.write(f"**Summary:** {response_json.get('summary', 'No summary provided')}")
 
+                    st.subheader("⚠️ Risks Identified")
+                    for r in response_json.get("risks", []):
+                        st.warning(r)
+
+                    st.subheader("Overall Risk Level")
+                    risk_badge(response_json.get("risk_level", "Unknown"))
+
+                    st.subheader("Contract Status")
+                    st.info(response_json.get("status", "Unknown"))
+
+                except json.JSONDecodeError:
+                    st.error("Error parsing AI response via JSON.")
+                    st.write("Raw response form AI:")
+                    st.code(raw_response)
 
 # ==============================================================
-# PAGE 3 • EXTERNAL RISK ALERTS
+# PÁGINA 3 • EXTERNAL RISK ALERTS
 # ==============================================================
 elif page == "External Risk Alerts":
     st.header("🌐 External Risk Alerts")
-
     query = st.text_input("Search news related to:", "cement, aluminum, logistics")
 
     if st.button("Fetch News"):
-        news_results = [
-            {
-                "title": "Aluminum plant in Germany shuts down temporarily",
-                "source": "Reuters",
-                "risk": "High",
-                "impact": "Possible disruption in aluminum supply."
-            },
-            {
-                "title": "Severe snowstorm expected in Quebec",
-                "source": "CBC News",
-                "risk": "Medium",
-                "impact": "Potential delays in cement transportation."
-            }
-        ]
-
-        for news in news_results:
-            st.subheader(news["title"])
-            st.write(f"📰 Source: {news['source']}")
-            st.write(f"📌 Impact: {news['impact']}")
-            risk_badge(news["risk"])
-
-            st.markdown("---")
+        st.info("Searching global news sources...")
+        # Mock results
+        st.subheader("Aluminum plant in Germany shuts down temporarily")
+        st.write("📰 Source: Reuters")
+        risk_badge("High")
+        st.markdown("---")
