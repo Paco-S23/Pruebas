@@ -6,23 +6,28 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
 # -------------------------------
-# CONFIGURACIÓN GENERAL
+# 1. CONFIGURACIÓN GENERAL
 # -------------------------------
-st.set_page_config(page_title="ProcureWatch • AI", layout="wide")
+st.set_page_config(
+    page_title="ProcureWatch • AI",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 st.title("📑 ProcureWatch")
 st.markdown("### Contract Analysis & Supply Chain Monitor")
 
-# Inicializar memorias
+# Inicializar memorias de sesión (Chat y Contrato)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "contract_text" not in st.session_state:
     st.session_state.contract_text = ""
 
 # -------------------------------
-# BACKEND IBM WATSON
+# 2. BACKEND IBM WATSON (IA)
 # -------------------------------
 def ask_ibm_watson(prompt_text):
+    # TUS CREDENCIALES
     creds = {
         "url": "https://us-south.ml.cloud.ibm.com",
         "apikey": "7df1e07ee763823210cc7609513c0c6fe4ff613cc3583613def0ec12f2570a17"
@@ -44,11 +49,11 @@ def ask_ibm_watson(prompt_text):
         return f"Error: {str(e)}"
 
 # -------------------------------
-# BARRA LATERAL (NAVEGACIÓN)
+# 3. BARRA LATERAL (NAVEGACIÓN)
 # -------------------------------
 st.sidebar.header("Navigation")
 
-# AQUÍ ESTÁN LAS 3 OPCIONES
+# Menú con las 3 opciones
 page = st.sidebar.radio(
     "Go to:", 
     ["Dashboard", "AI Chat & Analysis", "External Risk Alerts"]
@@ -56,7 +61,7 @@ page = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
-# Indicador de estado del contrato
+# Indicador de estado del contrato en memoria
 if st.session_state.contract_text:
     st.sidebar.success("📄 Contract Loaded")
     if st.sidebar.button("🗑️ Unload Contract"):
@@ -68,23 +73,26 @@ if st.session_state.contract_text:
 # ==============================================================
 if page == "Dashboard":
     st.header("📊 Procurement Dashboard")
+    
+    # KPIs Superiores
     col1, col2, col3 = st.columns(3)
     col1.metric("Contracts", "15")
     col2.metric("High Risk", "3", "Warning", delta_color="inverse")
     col3.metric("Pending", "7")
-   st.subheader("Active Contracts")
     
-    # 1. Creamos la tabla primero en una variable 'df'
+    st.markdown("---")
+    st.subheader("Active Contracts")
+    
+    # --- CORRECCIÓN DE ÍNDICE (EMPIEZA EN 1) ---
     df = pd.DataFrame([
         {"Supplier": "Cement Quebec", "Status": "Critical Risk", "Value": "$120k"},
         {"Supplier": "Germany Alum", "Status": "Safe", "Value": "$85k"},
         {"Supplier": "Montreal Steel", "Status": "Review", "Value": "$200k"},
     ])
-
-    # 2. EL TRUCO: Le sumamos 1 al índice (0+1, 1+1, etc.)
+    
+    # Aquí sumamos 1 al índice para que se vea 1, 2, 3...
     df.index = df.index + 1
-
-    # 3. Ahora sí la mostramos
+    
     st.dataframe(df, use_container_width=True)
 
 # ==============================================================
@@ -105,23 +113,25 @@ elif page == "AI Chat & Analysis":
     # 2. CHATBOT INTERACTIVO
     st.subheader("💬 AI Assistant")
     
-    # Mostrar historial
+    # Mostrar historial de mensajes
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Input del usuario
+    # Input del usuario (Barra de chat)
     if prompt := st.chat_input("Ask about the contract or anything else..."):
-        # Guardar mensaje usuario
+        
+        # Guardar y mostrar mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generar respuesta
+        # Generar respuesta de la IA
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 
                 # LÓGICA HÍBRIDA:
+                # Si hay contrato cargado, se incluye en el contexto.
                 if st.session_state.contract_text:
                     final_prompt = f"""
                     Context (Contract Text):
@@ -129,12 +139,13 @@ elif page == "AI Chat & Analysis":
                     
                     User Question: {prompt}
                     
-                    Instruction: Answer based on the contract if relevant. If not, answer generally.
+                    Instruction: Answer based on the contract if relevant. If not, answer generally using your knowledge.
                     Answer:
                     """
+                # Si no hay contrato, actúa como experto general.
                 else:
                     final_prompt = f"""
-                    Act as a supply chain expert AI.
+                    Act as a supply chain expert AI assistant.
                     User Question: {prompt}
                     Answer:
                     """
@@ -144,7 +155,7 @@ elif page == "AI Chat & Analysis":
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
 # ==============================================================
-# PÁGINA 3: NOTICIAS (EXTERNAL ALERTS) - ¡AQUÍ ESTÁ!
+# PÁGINA 3: NOTICIAS (EXTERNAL ALERTS)
 # ==============================================================
 elif page == "External Risk Alerts":
     st.header("🌐 Global Supply Chain Alerts")
@@ -153,7 +164,7 @@ elif page == "External Risk Alerts":
     with col1:
         query = st.text_input("Search news (Simulated):", "construction materials")
     with col2:
-        st.write("") # Espacio
+        st.write("") # Espacio para alinear
         st.write("") 
         search_btn = st.button("Search News")
     
@@ -182,4 +193,3 @@ elif page == "External Risk Alerts":
         st.caption("Source: Business World • 1 day ago")
         st.warning("🟠 Medium Impact")
         st.write("New tariffs may affect cost projection for Q1 2026.")
-
