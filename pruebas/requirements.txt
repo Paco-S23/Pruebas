@@ -1,4 +1,5 @@
 streamlit
 pandas
-pdfplumber
+requests
+PyPDF2
 ibm-watson-machine-learning
