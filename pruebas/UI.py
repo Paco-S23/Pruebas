@@ -7,7 +7,7 @@ from ibm_watson_machine_learning.foundation_models import Model
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
 
 # -------------------------------
-# CONFIGURACIÓN DE LA APP
+# 1. CONFIGURACIÓN GENERAL
 # -------------------------------
 st.set_page_config(
     page_title="ProcureWatch • Contract & Supply Monitor",
@@ -17,24 +17,23 @@ st.set_page_config(
 st.title("📑 ProcureWatch")
 st.write("AI-powered contract monitoring and external supply-chain risk detection.")
 
-
 # -------------------------------
-# FUNCIÓN DE IBM WATSON (Backend)
+# 2. LÓGICA DE CONEXIÓN CON IBM (BACKEND)
 # -------------------------------
 def analyze_contract_with_ibm(contract_text):
-    # 1. CREDENCIALES
+    # TUS CREDENCIALES (Ya puestas)
     creds = {
-        "url": "https://us-south.ml.cloud.ibm.com",
+        "url": "https://us-south.ml.cloud.ibm.com", # Dallas
         "apikey": "7df1e07ee763823210cc7609513c0c6fe4ff613cc3583613def0ec12f2570a17"
     }
     project_id = "077c11a6-2c5e-4c89-9a99-c08df3cb67ff"
 
-    # 2. MODELO
+    # Configuración del modelo (Granite 13b es rápido y eficiente)
     model_id = "ibm/granite-13b-chat-v2"
-
+    
     parameters = {
         GenParams.DECODING_METHOD: "greedy",
-        GenParams.MAX_NEW_TOKENS: 500,
+        GenParams.MAX_NEW_TOKENS: 600,
         GenParams.MIN_NEW_TOKENS: 10,
         GenParams.REPETITION_PENALTY: 1.1
     }
@@ -47,46 +46,45 @@ def analyze_contract_with_ibm(contract_text):
             project_id=project_id
         )
 
-        # 3. PROMPT
+        # Instrucción estricta para que responda en JSON
         prompt = f"""
-        Analyze the following contract text and extract key information in valid JSON format.
+        Act as a procurement expert. Analyze the contract text below.
+        Extract the following fields and return ONLY a valid JSON object.
+        
+        Fields required:
+        - supplier: Name of the supplier.
+        - summary: A 1-sentence summary of the contract.
+        - risk_level: "High", "Medium", or "Low".
+        - risks: A list of specific risks found (max 3).
+        - status: Recommendation (e.g., "Review Required", "Approved").
 
-        Text:
-        {contract_text[:3000]} 
-
-        Required JSON Structure:
-        {{
-            "supplier": "Name of supplier",
-            "risk_level": "High/Medium/Low",
-            "risks": ["risk 1", "risk 2"],
-            "status": "Recommended status",
-            "summary": "Short summary of the contract"
-        }}
-
-        Output only the JSON. Do not add markdown formatting:
+        Contract Text:
+        {contract_text[:3500]} 
+        
+        Output format (JSON only):
         """
 
         generated_response = model.generate_text(prompt=prompt)
         return generated_response
 
     except Exception as e:
-        return f"Error: {str(e)}"
-
+        return f"Error connecting to IBM: {str(e)}"
 
 # -------------------------------
-# COMPONENTES UI (Helpers)
+# 3. COMPONENTES VISUALES
 # -------------------------------
 def risk_badge(level):
     if level == "High":
         st.error("🔴 High Risk")
     elif level == "Medium":
         st.warning("🟠 Medium Risk")
-    else:
+    elif level == "Low":
         st.success("🟢 Low Risk")
-
+    else:
+        st.info(f"⚪ {level}")
 
 # -------------------------------
-# NAVEGACIÓN SIDEBAR
+# 4. BARRA LATERAL (Navegación + Chat)
 # -------------------------------
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
@@ -94,11 +92,12 @@ page = st.sidebar.radio(
     ["Dashboard", "Contract Monitoring", "External Risk Alerts"]
 )
 
-# --- CHAT DE IBM EN EL SIDEBAR ---
+# --- CHAT DE IBM ORCHESTRATE (EMBED) ---
 with st.sidebar:
     st.markdown("---")
     st.subheader("🤖 AI Assistant")
-
+    
+    # Script de IBM Orchestrate
     ibm_chat_embed = """
     <div style="height: 550px; width: 100%;">
         <script>
@@ -123,92 +122,93 @@ with st.sidebar:
         </script>
     </div>
     """
+    # Altura suficiente para que el chat no se corte
     components.html(ibm_chat_embed, height=600)
 
+
 # ==============================================================
-# PÁGINA 1 • DASHBOARD
+# PÁGINA 1: DASHBOARD
 # ==============================================================
 if page == "Dashboard":
     st.header("📊 Procurement Dashboard")
-
-    # Mock Data
-    contracts_data = pd.DataFrame([
-        {"Supplier": "Cement Quebec Inc.", "Material": "Cement", "Risk": "High"},
-        {"Supplier": "Germany Alum Co.", "Material": "Aluminum", "Risk": "Medium"},
-        {"Supplier": "Montreal SteelWorks", "Material": "Steel", "Risk": "High"}
-    ])
-
+    
+    # Datos de ejemplo
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Contracts", 3)
-    col2.metric("High Risk", 2)
-    col3.metric("Medium Risk", 1)
-    col4.metric("Low Risk", 0)
+    col1.metric("Total Contracts", "12")
+    col2.metric("High Risk", "3", "+1")
+    col3.metric("Medium Risk", "5", "-2")
+    col4.metric("Low Risk", "4")
 
     st.markdown("---")
-    st.subheader("📄 Active Contracts Overview")
-    st.dataframe(contracts_data, use_container_width=True)
+    st.subheader("Active Contracts")
+    df = pd.DataFrame([
+        {"Supplier": "Cement Quebec", "Status": "Review", "Risk": "High"},
+        {"Supplier": "Germany Alum", "Status": "Active", "Risk": "Medium"},
+    ])
+    st.dataframe(df, use_container_width=True)
 
 # ==============================================================
-# PÁGINA 2 • CONTRACT MONITORING (LÓGICA CORREGIDA)
+# PÁGINA 2: CONTRACT MONITORING (AQUÍ ESTÁ LA IA)
 # ==============================================================
 elif page == "Contract Monitoring":
-    st.header("📘 Contract Monitoring")
+    st.header("📘 Contract Analysis AI")
 
-    uploaded = st.file_uploader("Upload contract PDF", type=["pdf"])
+    uploaded = st.file_uploader("Upload contract (PDF)", type=["pdf"])
 
     if uploaded:
+        # Extraer texto del PDF
         with pdfplumber.open(uploaded) as pdf:
             text = "\n".join([page.extract_text() or "" for page in pdf.pages])
 
-        st.subheader("Extracted Contract Text")
-        st.text_area("Content", text, height=150)
+        st.success("PDF uploaded successfully!")
+        with st.expander("See extracted text"):
+            st.text(text[:1000] + "...")
 
-        # --- AQUÍ ESTABA EL ERROR: FALTABA EL BOTÓN ---
-        if st.button("Analyze Contract with IBM Granite"):
-
-            with st.spinner("🤖 Consulting IBM Watson AI..."):
-                # 1. Llamar a la función
+        # BOTÓN PARA LLAMAR A IBM WATSONX
+        if st.button("🚀 Analyze with IBM Granite"):
+            
+            with st.spinner("Consulting IBM Watson AI... please wait..."):
+                # 1. Llamada a la API
                 raw_response = analyze_contract_with_ibm(text)
-
-                # 2. Intentar convertir el texto a JSON real
+                
+                # 2. Procesar respuesta
                 try:
-                    # A veces la IA devuelve texto extra, intentamos limpiar si es necesario
-                    # o confiar en que granite siga la instrucción JSON
-                    response_json = json.loads(raw_response)
-
-                    st.success("Analysis Complete!")
-
-                    # 3. Mostrar resultados bonitos
-                    st.subheader("📄 Extracted Information")
-                    st.write(f"**Supplier:** {response_json.get('supplier', 'Unknown')}")
-                    st.write(f"**Summary:** {response_json.get('summary', 'No summary provided')}")
-
-                    st.subheader("⚠️ Risks Identified")
-                    for r in response_json.get("risks", []):
-                        st.warning(r)
-
-                    st.subheader("Overall Risk Level")
-                    risk_badge(response_json.get("risk_level", "Unknown"))
-
-                    st.subheader("Contract Status")
-                    st.info(response_json.get("status", "Unknown"))
-
-                except json.JSONDecodeError:
-                    st.error("Error parsing AI response via JSON.")
-                    st.write("Raw response form AI:")
+                    # Limpiamos la respuesta por si la IA añade texto extra fuera del JSON
+                    json_start = raw_response.find('{')
+                    json_end = raw_response.rfind('}') + 1
+                    clean_json = raw_response[json_start:json_end]
+                    
+                    data = json.loads(clean_json)
+                    
+                    # 3. Mostrar resultados
+                    st.divider()
+                    st.subheader(f"Analysis for: {data.get('supplier', 'Unknown Supplier')}")
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.caption("Risk Level")
+                        risk_badge(data.get('risk_level', 'Unknown'))
+                    with c2:
+                        st.caption("Recommendation")
+                        st.info(data.get('status', 'No status'))
+                    
+                    st.write(f"**Summary:** {data.get('summary', '')}")
+                    
+                    st.subheader("⚠️ Detected Risks")
+                    for r in data.get('risks', []):
+                        st.warning(f"• {r}")
+                        
+                except Exception as e:
+                    st.error("Error interpreting AI response.")
+                    st.text("Raw response received:")
                     st.code(raw_response)
+                    st.error(f"Details: {e}")
 
 # ==============================================================
-# PÁGINA 3 • EXTERNAL RISK ALERTS
+# PÁGINA 3: EXTERNAL ALERTS
 # ==============================================================
 elif page == "External Risk Alerts":
-    st.header("🌐 External Risk Alerts")
-    query = st.text_input("Search news related to:", "cement, aluminum, logistics")
-
-    if st.button("Fetch News"):
-        st.info("Searching global news sources...")
-        # Mock results
-        st.subheader("Aluminum plant in Germany shuts down temporarily")
-        st.write("📰 Source: Reuters")
-        risk_badge("High")
-        st.markdown("---")
+    st.header("🌐 Global Supply Chain Alerts")
+    st.info("News feed simulation active.")
+    st.write("• **High Risk:** Strike at Montreal Port affects logistics.")
+    st.write("• **Medium Risk:** Aluminum price fluctuation in EU market.")
