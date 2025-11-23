@@ -1,25 +1,20 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# ==========================================
-# Configuración de la página
-# ==========================================
-st.set_page_config(page_title="IBM Agents - Web Chat", layout="wide")
+st.set_page_config(page_title="IBM Agents UI", layout="wide")
 
 st.title("🤖 IBM Watson Orchestrate Agents")
-st.write("Selecciona un agente en el menú de la izquierda para interactuar.")
+st.info("👇 El chat debería aparecer dentro del recuadro de abajo. Si ves un icono de chat en la esquina, dale clic.")
 
 # ==========================================
-# Definición de las Credenciales (Extraídas de tus scripts)
+# Configuración (Tus scripts)
 # ==========================================
-# Configuración común para ambos agentes
 COMMON_CONFIG = {
     "orchestrationID": "03ada0a325ec426d893eef11d68e7d31_f322ed2b-accb-4baa-a7e9-3d0419313afc",
     "hostURL": "https://jp-tok.watson-orchestrate.cloud.ibm.com",
     "crn": "crn:v1:bluemix:public:watsonx-orchestrate:jp-tok:a/03ada0a325ec426d893eef11d68e7d31:f322ed2b-accb-4baa-a7e9-3d0419313afc::"
 }
 
-# Configuración específica por Agente
 AGENTS = {
     "Agente 1": {
         "agentId": "df87f2d2-3200-4788-b0bd-de2033f818ee",
@@ -31,29 +26,24 @@ AGENTS = {
     }
 }
 
-# ==========================================
-# Selector de Agente
-# ==========================================
-agent_selection = st.sidebar.radio("Elige tu Agente:", ["Agente 1", "Agente 2"])
+# Selector en la barra lateral
+agent_selection = st.sidebar.radio("Selecciona el Agente:", list(AGENTS.keys()))
 
-# ==========================================
-# Generador de HTML para el Chat
-# ==========================================
 def get_chat_html(agent_name):
     config = AGENTS[agent_name]
     
-    # Creamos el HTML completo inyectando las variables correctas
     html_code = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <style>
-            body {{ margin: 0; padding: 0; background-color: #f0f2f6; font-family: sans-serif; }}
-            #root {{ width: 100%; height: 600px; }}
+            /* Forzamos que el contenedor ocupe todo el espacio y tenga fondo blanco */
+            body, html {{ height: 100%; margin: 0; background-color: #ffffff; }}
+            #root {{ width: 100%; height: 100%; }}
         </style>
     </head>
     <body>
-        <div id="root"></div>
+        <div id="root">Cargando chat de IBM...</div>
 
         <script>
           window.wxOConfiguration = {{
@@ -75,18 +65,15 @@ def get_chat_html(agent_name):
                 wxoLoader.init();
             }});
             document.head.appendChild(script);
-          }}, 0);
+          }}, 500);
         </script>
     </body>
     </html>
     """
     return html_code
 
-# ==========================================
-# Renderizado
-# ==========================================
-st.subheader(f"Conectado con: {agent_selection}")
+st.write(f"### Conectado con: {agent_selection}")
 
-# Renderizamos el HTML dentro de un iframe de Streamlit
-# Height=700 para dar espacio al chat completo
-components.html(get_chat_html(agent_selection), height=700, scrolling=True)
+# Aquí renderizamos el chat.
+# Le puse un borde para que veas el área activa.
+components.html(get_chat_html(agent_selection), height=800, scrolling=False)
