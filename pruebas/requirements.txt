@@ -1,5 +1,3 @@
 streamlit
-pandas
 requests
-PyPDF2
-ibm-watson-machine-learning
+python-dotenv
