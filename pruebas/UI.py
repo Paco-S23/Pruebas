@@ -226,7 +226,7 @@ with tab2:
         with st.expander("View Text"):
             st.text(contract_text)
     else:
-        st.info("Please upload a PDF in the Sidebar to wake up the Document Agent.")
+        st.info("👈 Upload a PDF in the Sidebar first.")
 
 # PESTAÑA 3: NOTICIAS
 with tab3:
@@ -238,3 +238,4 @@ with tab3:
             results = agent_web_searcher(query)
             st.success("Search Complete")
             st.write(results)
+
