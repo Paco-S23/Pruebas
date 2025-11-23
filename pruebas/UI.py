@@ -88,12 +88,8 @@ def call_agent(agent_id, user_message):
 # =========================================================
 st.set_page_config(page_title="IBM Agents UI", layout="centered")
 
-st.title("🛡️ SmartChain Guardian")
+st.title("SmartChain Guardian")
 st.write("Interact with your IBM Watsonx AI agents.")
-
-# Check basic configuration
-if not PROJECT_ID:
-    st.warning("⚠️ Warning: PROJECT_ID not found in environment variables.")
 
 tabs = st.tabs(["🤖 Internal Monitor", "🌍 External Risk Monitor"])
 
@@ -132,3 +128,4 @@ with tabs[1]:
                 response = call_agent(AGENT_2_ID, text2)
                 st.write("### Response:")
                 st.markdown(response)
+                
