@@ -1,5 +1,4 @@
 import streamlit as st
-import pdfplumber
 import pandas as pd
 import requests
 import json
@@ -15,15 +14,47 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # -------------------------------
-# 2. DEFINICIÓN DE AGENTES
+# 2. BASE DE DATOS SIMULADA (CONTRATOS)
 # -------------------------------
+# Aquí están los contratos "cargados" en tu sistema
+contracts_db = {
+    "⚠️ Heavy Metal Solutions (High Risk)": """
+    CONTRACT ID: HMS-2025-001
+    SUPPLIER: Heavy Metal Solutions S.A.
+    DATE: Nov 24, 2025
+    
+    1. PAYMENT TERMS: Client must pay 100% of the total value in advance before loading. No refunds.
+    2. DELAY PENALTY: In case of delay, the penalty is $10 USD per day, capped at a maximum of $100 USD total.
+    3. WARRANTY: Goods are delivered 'AS-IS'. The Supplier accepts no responsibility for oxidation, fatigue, or defects.
+    4. TERMINATION: The Supplier reserves the right to terminate this agreement unilaterally without notice.
+    """,
+    
+    "✅ Global Cement Corp (Safe)": """
+    CONTRACT ID: GCC-2025-998
+    SUPPLIER: Global Cement Corp.
+    DATE: Oct 10, 2025
+    
+    1. PAYMENT TERMS: Net 60 days after successful delivery and inspection.
+    2. DELAY PENALTY: 5% of the total contract value for every week of delay.
+    3. WARRANTY: 2-year full warranty on material quality and structural integrity.
+    4. TERMINATION: 30 days written notice required by either party to terminate.
+    """,
+    
+    "📋 Montreal SteelWorks (Standard)": """
+    CONTRACT ID: MSW-2025-055
+    SUPPLIER: Montreal SteelWorks
+    DATE: Dec 01, 2025
 
-# --- HERRAMIENTA: LEER PDF (CACHÉ) ---
-@st.cache_data
-def extract_text_from_pdf(uploaded_file):
-    with pdfplumber.open(uploaded_file) as pdf:
-        text = "\n".join([page.extract_text() or "" for page in pdf.pages])
-    return text
+    1. PAYMENT TERMS: 50% upfront, 50% upon delivery at port.
+    2. DELAY PENALTY: Standard market rate applicable (0.5% per day).
+    3. WARRANTY: 1-year standard warranty against manufacturing defects.
+    4. TERMINATION: Termination requires mutual agreement.
+    """
+}
+
+# -------------------------------
+# 3. DEFINICIÓN DE AGENTES
+# -------------------------------
 
 # --- MOTOR LLM (CEREBRO DE IBM) ---
 def call_ibm_llm(prompt):
@@ -52,7 +83,7 @@ def agent_document_reader(user_query, context_text):
     TASK: Answer the question based STRICTLY on the provided contract text.
     
     CONTRACT CONTEXT:
-    {context_text[:4000]}
+    {context_text}
     
     USER QUESTION: {user_query}
     
@@ -62,14 +93,11 @@ def agent_document_reader(user_query, context_text):
 
 # --- SUB-AGENTE 2: WEB SEARCHER (NEWS API) ---
 def agent_web_searcher(user_query):
-    # Limpiamos la query para la búsqueda
     clean_query = user_query.replace("search", "").replace("news", "").replace("buscar", "").strip()
     
-    # ⚠️ TU API KEY DE NEWSAPI (Si no tienes, fallará elegantemente)
     api_key = "TU_API_KEY_DE_NEWSAPI_AQUI" 
     
     if api_key == "TU_API_KEY_DE_NEWSAPI_AQUI":
-        # MODO SIMULACIÓN SI NO HAY KEY (Para que no falle tu demo)
         return "⚠️ NewsAPI Key missing. Simulation: Found recent news about supply chain disruptions in logistics sectors."
 
     url = f"https://newsapi.org/v2/everything?q={clean_query}&sortBy=publishedAt&apiKey={api_key}&language=en&pageSize=3"
@@ -90,39 +118,38 @@ def agent_web_searcher(user_query):
     except:
         return "I tried to connect to the news feed but failed."
 
-# --- AGENTE PRINCIPAL: EL ORQUESTADOR (ESTE FALTABA EN TU CÓDIGO) ---
+# --- AGENTE PRINCIPAL: EL ORQUESTADOR ---
 def main_agent_router(user_query, has_contract_context):
-    """
-    Este agente decide a quién llamar.
-    """
     user_query_lower = user_query.lower()
     
-    # 1. Si el usuario pide explícitamente buscar/noticias -> SUB-AGENTE BUSCADOR
+    # 1. Búsqueda
     if "news" in user_query_lower or "search" in user_query_lower or "alert" in user_query_lower:
         return "SEARCH_AGENT"
-        
-    # 2. Si hay un contrato cargado y la pregunta parece del documento -> SUB-AGENTE LECTOR
+    # 2. Documento
     elif has_contract_context:
         return "DOC_AGENT"
-        
-    # 3. Si no, respuesta genérica -> LLM DIRECTO
+    # 3. General
     else:
         return "GENERAL_CHAT"
 
 # -------------------------------
-# 3. UI: BARRA LATERAL (EL CHAT INTELIGENTE)
+# 4. UI: BARRA LATERAL (EL CHAT INTELIGENTE)
 # -------------------------------
 with st.sidebar:
     st.title("📑 ProcureWatch")
     st.caption("Multi-Agent System Active")
     st.markdown("---")
     
-    # A. CARGA DE CONTEXTO
-    uploaded = st.file_uploader("Upload Contract (PDF)", type=["pdf"], key="sidebar_uploader")
-    contract_text = ""
-    if uploaded:
-        contract_text = extract_text_from_pdf(uploaded)
-        st.success("✅ Document Agent Ready")
+    # A. SELECCIÓN DE CONTRATO (BASE DE DATOS)
+    st.subheader("🗄️ Active Contract Database")
+    selected_contract_name = st.selectbox(
+        "Select a contract to monitor:",
+        options=list(contracts_db.keys())
+    )
+    
+    # Cargamos el texto del contrato seleccionado
+    contract_text = contracts_db[selected_contract_name]
+    st.success(f"✅ Loaded: {selected_contract_name.split(':')[0]}")
     
     st.markdown("---")
     
@@ -142,16 +169,14 @@ with st.sidebar:
                 if "agent_used" in msg:
                     st.caption(f"Processed by: {msg['agent_used']}")
 
-    # C. INPUT Y LÓGICA DEL AGENTE PRINCIPAL
-    if prompt := st.chat_input("Ask about contracts or search news..."):
+    # C. INPUT Y LÓGICA
+    if prompt := st.chat_input("Ask about this contract or search news..."):
         
-        # 1. Guardar mensaje usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with chat_container:
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-        # 2. EL AGENTE PRINCIPAL DECIDE
         decision = main_agent_router(prompt, bool(contract_text))
         
         final_response = ""
@@ -160,8 +185,6 @@ with st.sidebar:
         with chat_container:
             with st.chat_message("assistant"):
                 with st.spinner(f"Orchestrator is routing to {decision}..."):
-                    
-                    # --- EJECUCIÓN DE SUB-AGENTES ---
                     
                     if decision == "SEARCH_AGENT":
                         agent_name = "🌐 Search Agent"
@@ -179,7 +202,6 @@ with st.sidebar:
                     st.markdown(final_response)
                     st.caption(f"⚡ Action handled by: {agent_name}")
                     
-                    # Guardar en historial con etiqueta
                     st.session_state.messages.append({
                         "role": "assistant", 
                         "content": final_response,
@@ -187,7 +209,7 @@ with st.sidebar:
                     })
 
 # -------------------------------
-# 4. ÁREA PRINCIPAL (TABS)
+# 5. ÁREA PRINCIPAL (TABS)
 # -------------------------------
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📘 Internal Contract Monitor", "🌐 Construction & Supply Chain Risk Monitor"])
 
@@ -210,27 +232,28 @@ with tab1:
 
 # PESTAÑA 2: ANÁLISIS
 with tab2:
-    st.header("Cross-reference all contracts against actual warehouse records to identify compliance issues, delivery failures, and specification mismatches.")
-    if contract_text:
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("Generate Summary"):
-                st.write(call_ibm_llm(f"Summarize: {contract_text[:3000]}"))
-        with c2:
-            if st.button("Scan Risks"):
-                st.warning(call_ibm_llm(f"Find risks: {contract_text[:3000]}"))
-        with st.expander("View Text"):
-            st.text(contract_text)
-    else:
-        st.info("👈 Upload a PDF in the Sidebar first.")
+    st.header("Cross-reference contracts against warehouse records")
+    
+    # Mostrar qué contrato está activo actualmente
+    st.info(f"📂 Currently Analyzing: **{selected_contract_name}**")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Generate Summary"):
+            st.write(call_ibm_llm(f"Summarize: {contract_text}"))
+    with c2:
+        if st.button("Scan Risks"):
+            st.warning(call_ibm_llm(f"Find risks in this text: {contract_text}"))
+            
+    with st.expander("View Full Contract Text"):
+        st.code(contract_text)
 
 # PESTAÑA 3: NOTICIAS
 with tab3:
-    st.header("Scans online sources to detect external events that may impact the supply chain or specific contracts.")
+    st.header("External Supply Chain Events")
     query = st.text_input("Manual Search:", "Supply Chain")
     if st.button("Run Search Agent"):
         with st.spinner("Agent searching..."):
-            # Reutilizamos el sub-agente de búsqueda
             results = agent_web_searcher(query)
             st.success("Search Complete")
             st.write(results)
