@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ============================
-# Configuración
+# Configuration
 # ============================
 API_KEY = os.getenv("WATSONX_APIKEY")
 PROJECT_ID = os.getenv("WATSONX_PROJECT_ID")
@@ -14,33 +14,46 @@ AGENT_1_ID = os.getenv("AGENT_1_ID")
 AGENT_2_ID = os.getenv("AGENT_2_ID")
 
 BASE_URL = "https://us-south.ml.cloud.ibm.com"
-TOKEN_URL = f"{BASE_URL}/v1/authorize"
 AGENT_URL = f"{BASE_URL}/watsonx/agents/v1/agent_runs"
 
+
 # ============================
-# Función para obtener token
+# Correct Token Function
 # ============================
 def get_token():
-    headers = {"Content-Type": "application/json"}
-    payload = {"apikey": API_KEY, "grant_type": "urn:ibm:params:oauth:grant-type:apikey"}
+    url = "https://iam.cloud.ibm.com/identity/token"
 
-    res = requests.post(TOKEN_URL, json=payload, headers=headers)
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    data = (
+        f"grant_type=urn:ibm:params:oauth:grant-type:apikey"
+        f"&apikey={API_KEY}"
+    )
+
+    res = requests.post(url, headers=headers, data=data)
+
     if res.status_code != 200:
+        print(res.text)
         return None
-    return res.json().get("access_token", None)
+
+    return res.json().get("access_token")
+
 
 # ============================
-# Función para enviar mensaje
+# Send message to Agent
 # ============================
 def call_agent(agent_id, user_message):
+
     token = get_token()
     if token is None:
-        return "❌ Error: No se pudo obtener token."
+        return "❌ Error: Unable to obtain authentication token."
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     payload = {
@@ -56,53 +69,53 @@ def call_agent(agent_id, user_message):
     res = requests.post(AGENT_URL, headers=headers, json=payload)
 
     if res.status_code != 200:
-        return f"❌ Error en la API: {res.text}"
+        return f"❌ API Error:\n{res.text}"
 
-    data = res.json()
     try:
-        return data["output"]["messages"][0]["content"]
+        return res.json()["output"]["messages"][0]["content"]
     except:
-        return "❌ Error procesando respuesta."
+        return "❌ Error processing the agent's response."
 
 
 # =========================================================
-# INTERFAZ — SIN SIDEBAR y solo 2 pestañas
+# UI — No sidebar, 2 tabs
 # =========================================================
-st.set_page_config(page_title="Agentes IBM", layout="centered")
+st.set_page_config(page_title="IBM Agents UI", layout="centered")
 
-st.title("🤖 IBM Watsonx — Agentes")
-st.write("Interactúa con tus agentes de forma rápida y sencilla.")
+st.title("🤖 IBM Watsonx Agents")
+st.write("Interact with your agents easily.")
 
-tabs = st.tabs(["Agente 1", "Agente 2"])
+tabs = st.tabs(["Agent 1", "Agent 2"])
 
 # ------------------------
-# Pestaña Agente 1
+# Agent 1 Tab
 # ------------------------
 with tabs[0]:
-    st.subheader("Agente 1")
+    st.subheader("Agent 1")
 
-    msg1 = st.text_area("Escribe tu consulta:", key="msg1")
+    text1 = st.text_area("Write your question:", key="msg1")
 
-    if st.button("Enviar al Agente 1"):
-        if msg1.strip() == "":
-            st.warning("Escribe un mensaje primero.")
+    if st.button("Send to Agent 1"):
+        if text1.strip() == "":
+            st.warning("Please enter a message.")
         else:
-            respuesta = call_agent(AGENT_1_ID, msg1)
-            st.write("### Respuesta:")
-            st.write(respuesta)
+            response = call_agent(AGENT_1_ID, text1)
+            st.write("### Response:")
+            st.write(response)
+
 
 # ------------------------
-# Pestaña Agente 2
+# Agent 2 Tab
 # ------------------------
 with tabs[1]:
-    st.subheader("Agente 2")
+    st.subheader("Agent 2")
 
-    msg2 = st.text_area("Escribe tu consulta:", key="msg2")
+    text2 = st.text_area("Write your question:", key="msg2")
 
-    if st.button("Enviar al Agente 2"):
-        if msg2.strip() == "":
-            st.warning("Escribe un mensaje primero.")
+    if st.button("Send to Agent 2"):
+        if text2.strip() == "":
+            st.warning("Please enter a message.")
         else:
-            respuesta = call_agent(AGENT_2_ID, msg2)
-            st.write("### Respuesta:")
-            st.write(respuesta)
+            response = call_agent(AGENT_2_ID, text2)
+            st.write("### Response:")
+            st.write(response)
